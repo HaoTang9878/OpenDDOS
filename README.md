@@ -2,8 +2,6 @@
 
 [中文说明](/README.zh-CN.md)  
 
-![OpenDDOS Logo](https://via.placeholder.com/150x50?text=OpenDDOS)
-
 ## Overview
 
 OpenDDOS is a comprehensive network testing toolkit built with Bash that provides an interactive menu interface for performing network reconnaissance and stress testing operations. The modular design supports testing across multiple protocols including TCP, UDP, and ICMP.
@@ -59,13 +57,13 @@ OpenDDOS is a comprehensive network testing toolkit built with Bash that provide
 $ git clone https://github.com/HaoTang9878/OpenDDOS.git
 ```
 
-- cd :
+- change dirctory to OpenDDOS :
 
 ```
 $ cd OpenDDOS
 ```
 
-- chomod :
+- Set execution permissions for OpenDDOS :
 
 ```
 $ chmod +x OpenDDOS
