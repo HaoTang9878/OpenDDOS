@@ -50,6 +50,7 @@ git clone https://github.com/HaoTang9878/OpenDDOS.git
 cd OpenDDOS  
 chmod +x OpenDDOS  
 sudo ./OpenDDOS
+```
 
 ### Or Download Releases
 Download the latest version from [Releases page](https://github.com/HaoTang9878/OpenDDOS/releases)
