@@ -4,7 +4,6 @@
 
 **一个基于Bash的交互式菜单工具，用于快速执行网络侦察和压力测试**
 
-![OpenDDOS Logo](https://via.placeholder.com/150x50?text=OpenDDOS)
 
 ## 项目简介
 
