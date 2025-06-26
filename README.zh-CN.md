@@ -53,8 +53,17 @@ OpenDDOS 是一个功能强大的网络测试工具集，提供直观的交互�
 ### 快速安装
 ```bash
 git clone https://github.com/HaoTang9878/OpenDDOS.git
+```
+
+```
 cd OpenDDOS
+```
+
+```
 chmod +x OpenDDOS
+```
+
+```
 sudo ./OpenDDOS
 ```
 
