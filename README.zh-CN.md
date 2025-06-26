@@ -64,7 +64,7 @@ chmod +x OpenDDOS
 ```
 
 ```
-sudo ./OpenDDOS
+./OpenDDOS
 ```
 
 ### 或下载发布版
