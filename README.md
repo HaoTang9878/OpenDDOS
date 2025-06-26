@@ -35,22 +35,23 @@ OpenDDOS is a comprehensive network testing toolkit built with Bash that provide
 ### Operating System
 - Linux (Tested on Debian/Arch distributions)
 
-### Dependencies
-```bash
-bash
-sudo
-curl
-netcat (with -k support)
-hping3/nping
-openssl
-stunnel
-nmap
-whois
-nslookup/host
-ike-scan
-bind-tools
+## System Requirements  
+- **Operating System**: Linux (Tested on Debian/Arch)  
+- **Dependencies**:  
+  - bash  
+  - sudo  
+  - curl  
+  - netcat (with -k support)  
+  - hping3/nping  
+  - openssl  
+  - stunnel  
+  - nmap  
+  - whois  
+  - nslookup/host  
+  - ike-scan  
+  - bind-tools  
 
-### How to use
+### Quick Installation  
 
 - Download the script:
 
