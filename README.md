@@ -42,7 +42,7 @@ Tested on Debian and Arch.
 - Download the script:
 
 ```
-$ wget https://raw.githubusercontent.com/GinjaChris/OpenDDOS/master/OpenDDOS
+$ git clone https://github.com/HaoTang9878/OpenDDOS.git
 ```
 
 - Make it executable:
