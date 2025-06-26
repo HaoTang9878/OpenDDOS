@@ -1,55 +1,78 @@
 # OpenDDOS - Open-Source Network Stress Testing Toolkit
+
 [中文说明](/README.zh-CN.md)  
-**A Bash-based interactive menu tool for rapid network reconnaissance and stress testing**  
+
 ![OpenDDOS Logo](https://via.placeholder.com/150x50?text=OpenDDOS)
 
-## Project Introduction  
-OpenDDOS is a powerful network testing toolkit featuring an intuitive interactive menu interface that integrates multiple network reconnaissance and stress testing functions. Designed with modular architecture, it supports various protocol tests including TCP/UDP/ICMP.
+## Overview
 
-## Features  
-### Reconnaissance Module  
-- **Network Interface Detection**: Displays local and public IP information  
-- **DNS Reconnaissance**: Performs DNS queries and WHOIS lookups  
-- **Host Discovery**: ICMP Ping sweeps across network segments  
-- **Port Scanning**: Quick scan and comprehensive scan options  
-- **Service Identification**: Detects service versions and operating systems  
-- **VPN Detection**: Identifies IPsec VPN servers  
+OpenDDOS is a comprehensive network testing toolkit built with Bash that provides an interactive menu interface for performing network reconnaissance and stress testing operations. The modular design supports testing across multiple protocols including TCP, UDP, and ICMP.
 
-### Stress Testing Module  
-- **ICMP Flood**: Traditional ICMP Echo flood attacks  
-- **TCP Flood**: SYN/ACK/RST/XMAS flag combination attacks  
-- **UDP Flood**: High-bandwidth UDP packet floods  
-- **SSL/TLS Attacks**: Resource exhaustion through handshake process  
-- **Slowloris**: Low-speed HTTP header attacks  
-- **DNS Cache Poisoning**: NXDOMAIN query floods  
+## Features
 
-### Data Transfer  
-- **File Transfer**: Sends files via TCP/UDP protocols  
-- **Network Listener**: Establishes file receiving services  
+### Reconnaissance Module
+- **Network Interface Detection** - Identify local and public IP addresses
+- **DNS Reconnaissance** - Perform DNS queries and WHOIS lookups
+- **Host Discovery** - ICMP ping sweeps for network mapping
+- **Port Scanning** - Quick and comprehensive port scanning options
+- **Service Identification** - Detect service versions and OS fingerprints
+- **VPN Detection** - Identify IPsec VPN endpoints
 
-## System Requirements  
-- **Operating System**: Linux (Tested on Debian/Arch)  
-- **Dependencies**:  
-  - bash  
-  - sudo  
-  - curl  
-  - netcat (with -k support)  
-  - hping3/nping  
-  - openssl  
-  - stunnel  
-  - nmap  
-  - whois  
-  - nslookup/host  
-  - ike-scan  
-  - bind-tools  
+### Stress Testing Module
+- **ICMP Flood** - Traditional ping flood attacks
+- **TCP Flood** - SYN/ACK/RST/XMAS flag combination attacks
+- **UDP Flood** - High-bandwidth UDP packet floods
+- **SSL/TLS Attacks** - Handshake exhaustion attacks
+- **Slowloris** - Low-rate HTTP attacks
+- **DNS Amplification** - NXDOMAIN query floods
 
-## Installation  
-### Quick Installation  
-```bash  
-git clone https://github.com/HaoTang9878/OpenDDOS.git  
-cd OpenDDOS  
-chmod +x OpenDDOS  
-sudo ./OpenDDOS
+### Data Transfer Utilities
+- **File Transfer** - Send files via TCP/UDP
+- **Network Listener** - Establish file reception services
+
+## System Requirements
+
+### Operating System
+- Linux (Tested on Debian/Arch distributions)
+
+### Dependencies
+```bash
+bash
+sudo
+curl
+netcat (with -k support)
+hping3/nping
+openssl
+stunnel
+nmap
+whois
+nslookup/host
+ike-scan
+bind-tools
+
+### How to use
+
+- Download the script:
+
+```
+$ git clone https://github.com/HaoTang9878/OpenDDOS.git
+```
+
+- cd :
+
+```
+$ cd OpenDDOS
+```
+
+- chomod :
+
+```
+$ chmod +x OpenDDOS
+```
+- Run it:
+
+```
+$ ./OpenDDOS
 ```
 
 ### Or Download Releases
