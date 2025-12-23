@@ -15,24 +15,24 @@ PS3="OpenDDOS>"
 ##START MAINMENU##
 function_menu()
 {
-#build a main menu using bash select
-#from here, the various sub menus can be selected and from them, modules can be run
-function_menu=("Reconnaissance" "Stress Testing" "Data Transfer" "Documentation" "Exit Tool")
+#构建主菜单
+#从这里可以选择各种子菜单，并从中运行模块
+function_menu=("侦察" "压力测试" "数据传输" "文档" "退出工具")
 select opt in "${function_menu[@]}"; do
-    if [ "$opt" = "Exit Tool" ]; then
-    echo "Terminating session...Thank you for using OpenDDOS!" && sleep 1 && clear
+    if [ "$opt" = "退出工具" ]; then
+    echo "正在终止会话...感谢使用 OpenDDOS！" && sleep 1 && clear
     exit 0
-    elif [ "$opt" = "Reconnaissance" ]; then
+    elif [ "$opt" = "侦察" ]; then
 reconmenu
-    elif [ "$opt" = "Stress Testing" ]; then
+    elif [ "$opt" = "压力测试" ]; then
 dosmenu
-    elif [ "$opt" = "Data Transfer" ]; then
+    elif [ "$opt" = "数据传输" ]; then
 extractionmenu
-      elif [ "$opt" = "Documentation" ]; then
+      elif [ "$opt" = "文档" ]; then
 showreadme
     else
-#if no valid option is chosen, chastise the user
-    echo "Invalid selection! Press Enter to return to main menu"
+#如果选择了无效选项，提示用户
+    echo "无效选择！按 Enter 返回主菜单"
     fi
 done
 }
@@ -46,49 +46,49 @@ done
 ##START RECONMENU##
 reconmenu()
 {
-#build a menu for the recon modules using bash select
+#为侦察模块构建菜单
 reconmenu=(
-    "Network Interfaces" 
-    "DNS Enumeration" 
-    "Host Discovery" 
-    "TCP Quick Scan" 
-    "Comprehensive Scan" 
-    "UDP Service Scan" 
-    "Service Availability" 
-    "VPN Detection" 
-    "Return to Main"
+    "网络接口" 
+    "DNS枚举" 
+    "主机发现" 
+    "TCP快速扫描" 
+    "全面扫描" 
+    "UDP服务扫描" 
+    "服务可用性" 
+    "VPN检测" 
+    "返回主菜单"
 )
 select reconopt in "${reconmenu[@]}"; do
     case $reconopt in
-        "Network Interfaces")
+        "网络接口")
             showip
             ;;
-        "DNS Enumeration")
+        "DNS枚举")
             dnsrecon
             ;;
-        "Host Discovery")
+        "主机发现")
             pingsweep
             ;;
-        "TCP Quick Scan")
+        "TCP快速扫描")
             quickscan
             ;;
-        "Comprehensive Scan")
+        "全面扫描")
             detailedscan
             ;;
-        "UDP Service Scan")
+        "UDP服务扫描")
             udpscan
             ;;
-        "Service Availability")
+        "服务可用性")
             checkuptime
             ;;
-        "VPN Detection")
+        "VPN检测")
             ipsecscan
             ;;
-        "Return to Main")
+        "返回主菜单")
             function_menu
             ;;
         *)
-            echo "Invalid selection! Please choose a valid option"
+            echo "无效选择！请选择有效选项"
             ;;
     esac
 done
@@ -292,7 +292,7 @@ dnsrecon() {
 ###################
 ##START PINGSWEEP##
 pingsweep() {
-    # Color definitions
+    # 颜色定义
     local RED="\033[1;31m"
     local GREEN="\033[1;32m"
     local YELLOW="\033[1;33m"
@@ -300,29 +300,29 @@ pingsweep() {
     local CYAN="\033[1;36m"
     local RESET="\033[0m"
 
-    # Original header with color
-    echo -e "${CYAN}This module performs a simple ICMP echo 'ping' sweep${RESET}"
+    # 带颜色的标题
+    echo -e "${CYAN}此模块执行简单的ICMP回显'ping'扫描${RESET}"
     
-    # Colorized input prompt
-    echo -e "${YELLOW}Please enter the target (e.g. 192.168.1.0/24):${RESET}"
+    # 带颜色的输入提示
+    echo -e "${YELLOW}请输入目标（例如 192.168.1.0/24）：${RESET}"
     
-    # Original input handling with colorized default value hint
-    read -p "$(echo -e "${BLUE}Target IP/subnet [$TARGET]: ${RESET}")" input
+    # 带颜色的输入处理，带有默认值提示
+    read -p "$(echo -e "${BLUE}目标IP/子网 [$TARGET]: ${RESET}")" input
     TARGET=${input:-$TARGET}
     
-    # Colorized error message
+    # 带颜色的错误信息
     if [[ -z "$TARGET" ]]; then
-        echo -e "${RED}Error: Target cannot be empty${RESET}"
+        echo -e "${RED}错误：目标不能为空${RESET}"
         return 1
     fi
 
-    # Colorized scanning notification
-    echo -e "\n${GREEN}Scanning $TARGET ... (Press ${RED}Ctrl+C${GREEN} to abort)${RESET}\n"
+    # 带颜色的扫描通知
+    echo -e "\n${GREEN}正在扫描 $TARGET ...（按 ${RED}Ctrl+C${GREEN} 终止）${RESET}\n"
     
-    # Original scan command (unchanged)
+    # 原始扫描命令（未更改）
     sudo nmap -sP -PE $TARGET --reason
     
-    # Optional: You could add color to the scan results by piping through:
+    # 可选：您可以通过管道添加颜色到扫描结果：
     # | sed -E "s/Host is up/${GREEN}&${RESET}/g; s/Nmap done/${YELLOW}&${RESET}/g"
 }
 ##END PINGSWEEP##
@@ -338,21 +338,21 @@ quickscan() {
     local BLUE="\033[1;34m"
     local RESET="\033[0m"
     
-    # 提示信息（保持原样）
-    echo -e "${CYAN}This module conducts a scan using nmap${RESET}"
-    echo -e "${YELLOW}It is designed to scan an entire network for common open ports"
-    echo "It will perform a TCP SYN port scan of the 1000 most common ports"
-    echo -e "Depending on the target, the scan might take a long time to finish${RESET}"
+    # 提示信息
+    echo -e "${CYAN}此模块使用nmap进行扫描${RESET}"
+    echo -e "${YELLOW}它设计用于扫描整个网络的常见开放端口"
+    echo "它将对1000个最常见的端口执行TCP SYN端口扫描"
+    echo -e "根据目标不同，扫描可能需要很长时间才能完成${RESET}"
     
     # 用户输入
-    echo -e "${GREEN}Please enter the target host/IP/subnet:${RESET}"
+    echo -e "${GREEN}请输入目标主机/IP/子网：${RESET}"
     read -i $TARGET -e TARGET
-    echo -e "${GREEN}Enter the speed of scan (0 means very slow and 5 means fast).\nSlower scans are more subtle, but faster means less waiting around.\nDefault is 3:${RESET}"
+    echo -e "${GREEN}输入扫描速度（0表示非常慢，5表示非常快）。\n较慢的扫描更隐蔽，但更快意味着等待时间更短。\n默认值为3：${RESET}"
     read -i $SPEED -e SPEED
     : ${SPEED:=3}
 
     # 执行扫描并高亮关键信息（开放端口、服务等）
-    echo -e "${GREEN}Scanning...${RESET}"
+    echo -e "${GREEN}正在扫描...${RESET}"
     sudo nmap -Pn -sS -T $SPEED $TARGET --reason | awk '
         # 绿色高亮开放端口行
         /open/ {print "'$GREEN'" $0 "'$RESET'"; next}
@@ -673,65 +673,65 @@ ipsecscan() {
 ##START DOSMENU##
 dosmenu()
 {
-#display a menu for the stress testing module using bash select
+#显示压力测试模块的菜单
 dosmenu=(
-    "ICMP Echo Stress" 
-    "ICMP Protocol Test" 
-    "TCP SYN Stress" 
-    "TCP ACK Stress" 
-    "TCP RST Stress" 
-    "TCP XMAS Protocol Test" 
-    "UDP Bandwidth Test" 
-    "SSL/TLS Handshake Test" 
-    "HTTP Slow Headers" 
-    "VPN Stress Test" 
-    "Decoy Scan" 
-    "DNS Cache Stress" 
-    "Return to Main"
+    "ICMP回显压力" 
+    "ICMP协议测试" 
+    "TCP SYN压力" 
+    "TCP ACK压力" 
+    "TCP RST压力" 
+    "TCP XMAS协议测试" 
+    "UDP带宽测试" 
+    "SSL/TLS握手测试" 
+    "HTTP慢头测试" 
+    "VPN压力测试" 
+    "诱饵扫描" 
+    "DNS缓存压力" 
+    "返回主菜单"
 )
 select dosopt in "${dosmenu[@]}"; do
     case $dosopt in
-        "ICMP Echo Stress")
+        "ICMP回显压力")
             icmpflood
             ;;
-        "ICMP Protocol Test")
+        "ICMP协议测试")
             blacknurse
             ;;
-        "TCP SYN Stress")
+        "TCP SYN压力")
             synflood
             ;;
-        "TCP ACK Stress")
+        "TCP ACK压力")
             ackflood
             ;;
-        "TCP RST Stress")
+        "TCP RST压力")
             rstflood
             ;;
-        "TCP XMAS Protocol Test")
+        "TCP XMAS协议测试")
             xmasflood
             ;;
-        "UDP Bandwidth Test")
+        "UDP带宽测试")
             udpflood
             ;;
-        "SSL/TLS Handshake Test")
+        "SSL/TLS握手测试")
             ssldos
             ;;
-        "HTTP Slow Headers")
+        "HTTP慢头测试")
             slowloris
             ;;
-        "VPN Stress Test")
+        "VPN压力测试")
             ipsecdos
             ;;
-        "Decoy Scan")
+        "诱饵扫描")
             distractionscan
             ;;
-        "DNS Cache Stress")
+        "DNS缓存压力")
             nxdomainflood
             ;;
-        "Return to Main")
+        "返回主菜单")
             function_menu
             ;;
         *)
-            echo "Invalid selection! Please choose a valid test option"
+            echo "无效选择！请选择有效的测试选项"
             ;;
     esac
 done
@@ -2292,42 +2292,37 @@ curl -s https://raw.githubusercontent.com/HaoTang9878/OpenDDOS/master/README.md 
 #########################
 ##START WELCOME MESSAGE##
 clear && echo ""
-echo "   ██████╗ ██████╗ ███████╗███╗   ██╗    ██████╗ ██████╗ ██████╗ ███████╗"
-echo "  ██╔═══██╗██╔══██╗██╔════╝████╗  ██║   ██╔═══██╗██╔══██╗██╔══██╗██╔════╝"
-echo "  ██║   ██║██████╔╝█████╗  ██╔██╗ ██║   ██║   ██║██║  ██║██║  ██║███████╗"
-echo "  ██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║   ██║   ██║██║  ██║██║  ██║╚════██║"
-echo "  ╚██████╔╝██║     ███████╗██║ ╚████║   ╚██████╔╝██████╔╝██████╔╝███████║"
+echo "   ██████╗ ██████╗ ███████╗███╗   ██╗   ██████╗ ██████╗  ██████╗ ███████╗"
+echo "  ██╔═══██╗██╔══██╗██╔════╝████╗  ██║   ██╔══██╗██╔══██╗██╔═══██╗██╔════╝"
+echo "  ██║   ██║██████╔╝█████╗  ██╔██╗ ██║   ██║  ██║██║  ██║██║   ██║███████╗"
+echo "  ██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║   ██║  ██║██║  ██║██║   ██║╚════██║"
+echo "  ╚██████╔╝██║     ███████╗██║ ╚████║   ██████╔╝██████╔╝╚██████╔╝███████║"
 echo "   ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝    ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝"
-echo "                                                        "
-echo "██╗  ██╗███████╗██╗   ██╗██╗      ██████╗  ██████╗ ██╗"
-echo "██║  ██║██╔════╝╚██╗ ██╔╝██║     ██╔═══██╗██╔═══██╗██║"
-echo "███████║█████╗   ╚████╔╝ ██║     ██║   ██║██║   ██║██║"
-echo "██╔══██║██╔══╝    ╚██╔╝  ██║     ██║   ██║██║   ██║╚═╝"
-echo "██║  ██║███████╗   ██║   ███████╗╚██████╔╝╚██████╔╝██╗"
-echo "╚═╝  ╚═╝╚══════╝   ╚═╝   ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝"
-echo ""
-echo -e "\033[1;36mOpenDDOS Toolkit v0.1.0\033[0m - First Release"
+
+echo -e "\033[1;36mOpenDDOS 工具包 v0.1.0\033[0m - 首次发布"
 echo -e "\033[1;33m═════════════════════════════════════\033[0m"
-echo "Welcome to OpenDDOS - The open source network testing toolkit"
-echo "MyAwesomeTool  Copyright (C) 2025  Hao Tang"
-echo "This program comes with ABSOLUTELY NO WARRANTY; for details type 'show w'."
-echo "This is free software, and you are welcome to redistribute it under certain conditions; type 'show c' for details."
+echo "欢迎使用 OpenDDOS - 开源网络测试工具包"
+echo "版权所有 (C) 2025  TangHao"
+echo "本程序不提供任何保证；详情请输入 'show w'。"
+echo "这是自由软件，欢迎在特定条件下重新分发；详情请输入 'show c'。"
 echo ""
-echo -e "\033[0;34m[\033[0m!\033[0;34m]\033[0m Important Notice:"
-echo "This software is designed for AUTHORIZED security testing only."
-echo "Unauthorized use may violate local and international laws."
+echo -e "\033[0;34m[\033[0m!\033[0;34m]\033[0m 重要通知："
+echo "本软件仅设计用于授权的安全测试。"
+echo "未经授权使用可能违反当地和国际法律。"
 echo ""
-echo -e "\033[0;32m[\033[0m*\033[0;32m]\033[0m Documentation:"
+echo -e "\033[0;32m[\033[0m*\033[0;32m]\033[0m 文档："
 echo "GitHub: https://github.com/HaoTang9878/OpenDDOS"
-echo "Issues: https://github.com/HaoTang9878/OpenDDOS/issues"
-echo "Readme: https://github.com/HaoTang9878/OpenDDOS/blob/main/README.md"
+echo "问题反馈: https://github.com/HaoTang9878/OpenDDOS/issues"
+echo "使用说明: https://github.com/HaoTang9878/OpenDDOS/blob/main/README.md"
+
 echo ""
-echo -e "\033[0;35m[\033[0m*\033[0;35m]\033[0m Version Notes:"
-echo "First public release (v0.1.0)"
-echo "Includes basic DDoS testing modules"
-echo "Your feedback will help improve future versions"
+echo -e "\033[0;35m[\033[0m*\033[0;35m]\033[0m 版本说明："
+echo "首次公开发布 (v0.1.0)"
+echo "包含基本的 DDOS 测试模块"
+echo "您的反馈将帮助改进未来版本"
 echo ""
-echo -e "\033[1;31mYOU are solely responsible for proper usage!\033[0m"
+echo -e "\033[0;32m[\033[0m*\033[0;32m]\033[0m 比特币捐赠地址: 13siKzvBg96RYBS54BPpF7dD7DYgnFMr44"
+echo ""
 echo -e "\033[1;33m═════════════════════════════════════\033[0m"
 
 function_menu
